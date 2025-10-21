@@ -112,7 +112,10 @@
             <div id="tema-buttons" class="space-y-4 max-w-sm mx-auto">
                 <!-- Botones se inyectarán aquí (o el mensaje de carga) -->
             </div>
-            <p id="no-temas-message" class="text-gray-500 mt-6 hidden">No hay temas guardados. Ve al editor para cargar preguntas.</p>
+            <p id="no-temas-message" class="text-gray-500 mt-6 hidden">No hay temas guardados.</p>
+             <button id="btn-go-to-editor" class="mt-8 py-3 px-6 bg-gray-700 text-white font-bold rounded-lg shadow-md hover:bg-gray-800 transition w-full">
+                Ir al Editor para Agregar Preguntas
+            </button>
         </div>
 
 
@@ -360,6 +363,7 @@
         const totalPreguntasEditor = document.getElementById('total-preguntas-editor');
         const gestionPreguntasContainer = document.getElementById('gestion-preguntas-container');
         const connectionStatus = document.getElementById('connection-status');
+        const btnGoToEditor = document.getElementById('btn-go-to-editor');
         
         const editModalOverlay = document.getElementById('edit-modal-overlay');
         const editPregunta = document.getElementById('edit-pregunta');
@@ -418,7 +422,10 @@
                 const response = await fetch(SCRIPT_URL + '?cachebust=' + new Date().getTime());
                 if (!response.ok) throw new Error('No se pudo conectar con la base de datos.');
                 
-                allQuestionsFromSheet = await response.json();
+                const rawData = await response.json();
+                // FIX: Filtro robusto para datos inválidos o incompletos desde la hoja de cálculo
+                allQuestionsFromSheet = rawData.filter(q => q && q.pregunta && q.materia && q.tema && q.id !== null && typeof q.id !== 'undefined');
+
                 console.log(`Cargadas ${allQuestionsFromSheet.length} preguntas en total desde Google Sheets.`);
                 updateConnectionStatus('online');
                 showMateriaSelection();
@@ -503,7 +510,7 @@
                 listaPreguntas.forEach((q, index) => {
                     const qElement = document.createElement('div');
                     qElement.classList.add('p-3', 'bg-white', 'border', 'rounded-lg', 'shadow-sm');
-                    const respuestaCorrecta = (q.correctaindex !== null && q.opciones[q.correctaindex]) ? q.opciones[q.correctaindex] : 'Índice no válido';
+                    const respuestaCorrecta = (q.correctaindex !== null && q.opciones && q.opciones[q.correctaindex]) ? q.opciones[q.correctaindex] : 'Índice no válido';
                     qElement.innerHTML = `
                         <p class="text-sm font-bold text-indigo-700 mb-2">${index + 1}. ${q.pregunta}</p>
                         <p class="text-xs text-gray-600 mb-2">Respuesta: ${respuestaCorrecta} </p>
@@ -536,7 +543,7 @@
             editJustificacion.value = question.justificacion || '';
             
             editOpcionesContainer.innerHTML = '';
-            question.opciones.forEach((opcion, i) => {
+            (question.opciones || []).forEach((opcion, i) => {
                 const div = document.createElement('div');
                 div.classList.add('flex', 'items-center', 'space-x-2', 'mb-2');
                 div.innerHTML = `
@@ -672,7 +679,7 @@
             if (temasUnicos.length > 0) {
                 noTemasMessage.classList.add('hidden');
                 temasUnicos.forEach(tema => {
-                    const count = preguntasMateriaCompleta.filter(p => p.tema.trim() === tema).length;
+                    const count = preguntasMateriaCompleta.filter(p => (p.tema || '').trim() === tema).length;
                     const button = document.createElement('button');
                     button.innerHTML = `${tema} <span class="text-sm font-normal">(${count} preguntas)</span>`;
                     button.classList.add(
@@ -685,18 +692,6 @@
             } else {
                 noTemasMessage.classList.remove('hidden');
             }
-            
-            const btnGoToEditor = document.createElement('button');
-            btnGoToEditor.textContent = 'Ir al Editor para Agregar Preguntas';
-            btnGoToEditor.classList.add(
-                'mt-8', 'py-3', 'px-6', 'bg-gray-700', 'text-white', 'font-bold', 'rounded-lg', 'shadow-md', 'hover:bg-gray-800', 'transition', 'duration-150', 'ease-in-out', 'w-full'
-            );
-            btnGoToEditor.addEventListener('click', () => {
-                temaSelectionContainer.classList.add('hidden');
-                quizHeaderButtons.classList.remove('hidden');
-                alternarVista();
-            });
-            temaButtons.appendChild(btnGoToEditor);
         }
         
         function selectTema(tema) {
@@ -1148,7 +1143,7 @@
             puntajeSpan.textContent = puntaje; 
 
             opcionesContainer.innerHTML = '';
-            pregunta.opciones.forEach((opcion, index) => {
+            (pregunta.opciones || []).forEach((opcion, index) => {
                 const btn = document.createElement('button');
                 btn.textContent = opcion;
                 btn.classList.add('opcion-btn', 'w-full', 'py-3', 'px-4', 'text-left', 'bg-gray-50', 'text-gray-800', 'border-2', 'border-gray-200', 'rounded-lg', 'font-medium', 'focus:outline-none');
@@ -1269,6 +1264,11 @@
         
         btnToggleCargaMasiva.addEventListener('click', toggleCargaMasiva);
         btnAnalizar.addEventListener('click', analyzePastedText);
+        btnGoToEditor.addEventListener('click', () => {
+            temaSelectionContainer.classList.add('hidden');
+            quizHeaderButtons.classList.remove('hidden');
+            alternarVista();
+        });
 
 
         // --- INICIO DE LA APLICACIÓN ---
