@@ -42,8 +42,8 @@
         }
         /* Spinner CSS */
         .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid #ffffff;
+            border: 4px solid rgba(0, 0, 0, 0.2);
+            border-top: 4px solid #4f46e5;
             border-radius: 50%;
             width: 24px;
             height: 24px;
@@ -83,14 +83,15 @@
     <div id="app" class="w-full max-w-2xl bg-white shadow-2xl rounded-xl p-6 md:p-10">
 
         <!-- Encabezado -->
-        <header class="text-center mb-6">
+        <header class="text-center mb-6 relative">
             <h1 id="app-title" class="text-3xl font-extrabold text-indigo-700">Quiz App</h1>
+            <div id="connection-status" class="absolute top-0 right-0 text-xs font-bold p-2 rounded-full"></div>
         </header>
 
-        <!-- Pantalla de Carga de Firebase -->
+        <!-- Pantalla de Carga -->
         <div id="loading-screen" class="text-center p-10 bg-indigo-50 rounded-xl">
             <div class="spinner mx-auto mb-4"></div>
-            <p id="loading-message" class="text-lg font-medium text-indigo-700">Iniciando aplicación y autenticando...</p>
+            <p id="loading-message" class="text-lg font-medium text-indigo-700">Conectando con la base de datos...</p>
         </div>
 
         <!-- Pantalla de Selección de Materia -->
@@ -139,7 +140,7 @@
                      <input type="text" id="ia-generate-topic-input" placeholder="Ej: Intoxicación por Plomo" class="flex-grow p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500">
                      <button id="btn-ia-generate" class="py-3 px-5 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 transition flex items-center justify-center disabled:bg-gray-400">
                         <span id="ia-generate-text">Generar</span>
-                        <div id="ia-generate-spinner" class="spinner ml-2 hidden"></div>
+                        <div id="ia-generate-spinner" class="spinner ml-2 hidden" style="border-top-color: white;"></div>
                      </button>
                  </div>
             </div>
@@ -164,9 +165,9 @@
                 <button id="btn-analizar"
                         class="w-full py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition duration-150 ease-in-out flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed">
                         <span id="analizar-text">Analizar y Cargar Preguntas</span>
-                        <div id="analizar-spinner" class="spinner ml-3 hidden"></div>
+                        <div id="analizar-spinner" class="spinner ml-3 hidden" style="border-top-color: white;"></div>
                 </button>
-                <p class="text-gray-500 text-xs mt-2 text-center">Esta función usa IA para estructurar el texto. Puede fallar con textos muy complejos.</p>
+                <p class="text-gray-500 text-xs mt-2 text-center">Esta función usa IA para estructurar el texto.</p>
             </div>
 
 
@@ -252,7 +253,7 @@
             <div class="modal-content">
                 <h3 class="text-2xl font-bold text-indigo-600 mb-4">Editar Pregunta</h3>
                 <div class="space-y-4">
-                    <input type="hidden" id="edit-question-index">
+                    <input type="hidden" id="edit-question-id">
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Pregunta:</label>
@@ -304,48 +305,18 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- VARIABLES GLOBALES DE FIREBASE ---
-        let app;
-        let db;
-        let auth;
-        let userId;
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // --- CONFIGURACIÓN DE LA APP ---
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz2XR85PM93Z94SiDDh0sQjQhA0z1weat-6p9F7EHEvspUvpUFd1XmV37VqulEWdqBXWw/exec";
         
-        // --- CONFIGURACIÓN DE FIREBASE ---
-        // CLAVES DE CONFIGURACIÓN PROPORCIONADAS POR EL USUARIO
-        const firebaseConfig = {
-            apiKey: "AIzaSyBaitrYn2XZvUrHzLOOPOzbyFs_1c4HXvs",
-            authDomain: "quiz-d8af5.firebaseapp.com",
-            projectId: "quiz-d8af5",
-            storageBucket: "quiz-d8af5.firebasestorage.app",
-            messagingSenderId: "599443214955",
-            appId: "1:599443214955:web:56e22bf9dceb71f24d972e",
-            measurementId: "G-QV9XDSWCVH"
-        };
-        
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const LOCAL_STORAGE_KEY_PREFIX = 'quiz_data_local_';
-
-        // --- CONFIGURACIÓN DE MATERIAS ---
         const MATERIAS = {
-            'toxicologia': { name: 'Toxicología', color: 'bg-indigo-600', hover: 'hover:bg-indigo-700', defaultQuestions: [
-                { pregunta: "¿Cuál es el principal antídoto para el paracetamol?", opciones: ["Flumazenil", "N-acetilcisteína (NAC)", "Atropina", "Naloxona"], correctaIndex: 1, justificacion: "El NAC (N-acetilcisteína) es el precursor de glutatión, el cual es esencial para detoxificar el metabolito tóxico del paracetamol (NAPQI).", tema: "Antídotos Clave" },
-                { pregunta: "¿El cianuro inhibe qué complejo de la cadena respiratoria?", opciones: ["Complejo I", "Complejo II", "Complejo III", "Complejo IV"], correctaIndex: 3, justificacion: "El cianuro inhibe irreversiblemente el Complejo IV (Citocromo c oxidasa), bloqueando la respiración celular y causando hipoxia histotóxica.", tema: "Mecanismos de Toxicidad" }
-            ]},
-            'oftalmologia': { name: 'Oftalmología', color: 'bg-teal-600', hover: 'hover:bg-teal-700', defaultQuestions: [
-                { pregunta: "¿Qué estructura es responsable de la visión central más nítida?", opciones: ["Retina periférica", "Mácula", "Nervio óptico", "Cristalino"], correctaIndex: 1, justificacion: "La mácula, especialmente la fóvea en su centro, contiene la mayor concentración de fotorreceptores (conos) y es la encargada de la visión fina y de color.", tema: "Anatomía del Ojo"},
-                { pregunta: "¿El glaucoma suele estar asociado con un daño al?", opciones: ["Iris", "Nervio óptico", "Córnea", "Conjuntiva"], correctaIndex: 1, justificacion: "El glaucoma es una neuropatía óptica progresiva, caracterizada por la pérdida de fibras nerviosas en el nervio óptico, generalmente relacionada con una presión intraocular elevada.", tema: "Patologías Comunes" }
-            ]}
+            'toxicologia': { name: 'Toxicología', color: 'bg-indigo-600', hover: 'hover:bg-indigo-700' },
+            'oftalmologia': { name: 'Oftalmología', color: 'bg-teal-600', hover: 'hover:bg-teal-700' }
         };
         
         // --- VARIABLES DE ESTADO DE LA APLICACIÓN ---
-        let preguntasMateriaCompleta = []; // Almacena TODAS las preguntas cargadas para la materia
-        let preguntas = []; // Almacena las preguntas FILTRADAS por tema
+        let allQuestionsFromSheet = []; // Almacena TODAS las preguntas cargadas desde la hoja de cálculo
+        let preguntasMateriaCompleta = [];
+        let preguntas = [];
         let currentMateria = null; 
         let currentTema = null; 
         let indicePreguntaActual = 0;
@@ -353,8 +324,6 @@
         let seleccionActual = null;
         let respuestaComprobada = false;
         let vistaActual = 'quiz'; 
-        let unsubscribeFromQuiz = null; 
-        let firebaseInitialized = false;
 
         // --- REFERENCIAS DEL DOM ---
         const appTitle = document.getElementById('app-title');
@@ -390,21 +359,20 @@
         const currentTemaName = document.getElementById('current-tema-name');
         const totalPreguntasEditor = document.getElementById('total-preguntas-editor');
         const gestionPreguntasContainer = document.getElementById('gestion-preguntas-container');
+        const connectionStatus = document.getElementById('connection-status');
         
-        // Referencias para el Modal
         const editModalOverlay = document.getElementById('edit-modal-overlay');
         const editPregunta = document.getElementById('edit-pregunta');
         const editTema = document.getElementById('edit-tema');
         const editOpcionesContainer = document.getElementById('edit-opciones-container');
         const editCorrectaIndex = document.getElementById('edit-correcta-index');
         const editJustificacion = document.getElementById('edit-justificacion');
-        const editQuestionIndex = document.getElementById('edit-question-index');
+        const editQuestionId = document.getElementById('edit-question-id');
         const btnSaveEdit = document.getElementById('btn-save-edit');
         const btnCancelEdit = document.getElementById('btn-cancel-edit');
         const btnVerifyIa = document.getElementById('btn-verify-ia');
         const editFeedback = document.getElementById('edit-feedback');
-
-        // ✨ Referencias para las nuevas funciones de IA ✨
+        
         const btnPista = document.getElementById('btn-pista');
         const pistaContainer = document.getElementById('pista-container');
         const btnEli5 = document.getElementById('btn-eli5');
@@ -415,9 +383,7 @@
         const iaGenerateText = document.getElementById('ia-generate-text');
         const btnVerifyQuiz = document.getElementById('btn-verify-quiz');
         const verifyQuizFeedback = document.getElementById('verify-quiz-feedback');
-
-
-        // Referencias para Carga Masiva (reincorporado)
+        
         const btnToggleCargaMasiva = document.getElementById('btn-toggle-carga-masiva');
         const cargaMasivaContainer = document.getElementById('carga-masiva-container');
         const temaInput = document.getElementById('tema-input');
@@ -427,197 +393,66 @@
         const analizarSpinner = document.getElementById('analizar-spinner');
 
 
-        // --- FIREBASE Y PERSISTENCIA DE DATOS ---
-
-        // Función de guardado local
-        function saveLocalQuestions(materiaId, questions) {
-            try {
-                localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + materiaId, JSON.stringify(questions));
-                console.log(`Guardado local exitoso para ${materiaId}`);
-            } catch (e) {
-                console.error("Error al guardar en localStorage:", e);
+        // --- GOOGLE SHEETS Y PERSISTENCIA DE DATOS ---
+        function updateConnectionStatus(status, message = '') {
+            connectionStatus.classList.remove('bg-yellow-200', 'text-yellow-800', 'bg-green-200', 'text-green-800', 'bg-red-200', 'text-red-800');
+            if (status === 'connecting') {
+                connectionStatus.textContent = '🟡 Conectando...';
+                connectionStatus.classList.add('bg-yellow-200', 'text-yellow-800');
+            } else if (status === 'online') {
+                connectionStatus.textContent = '✅ Sincronizado';
+                connectionStatus.classList.add('bg-green-200', 'text-green-800');
+            } else if (status === 'offline') {
+                connectionStatus.textContent = '⚠️ Error de Conexión';
+                connectionStatus.classList.add('bg-red-200', 'text-red-800');
             }
         }
-
-        // Función de carga local
-        function loadLocalQuestions(materiaId) {
-            try {
-                const data = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + materiaId);
-                if (data) {
-                    const savedQuestions = JSON.parse(data);
-                    if (Array.isArray(savedQuestions)) {
-                         console.log(`Carga local exitosa para ${materiaId}. Preguntas: ${savedQuestions.length}`);
-                        return savedQuestions;
-                    }
-                }
-            } catch (e) {
-                console.error("Error al cargar de localStorage:", e);
-            }
-            return null;
-        }
-
-        async function initFirebase() {
+        
+        async function initApp() {
+            updateConnectionStatus('connecting');
             loadingScreen.classList.remove('hidden');
+            loadingMessage.textContent = 'Cargando preguntas desde la nube...';
             
-            // Si falta el projectId, asumimos que la configuración es inválida.
-            if (!firebaseConfig || !firebaseConfig.projectId) {
-                loadingMessage.textContent = "Advertencia: La persistencia de datos está deshabilitada (configuración faltante).";
-                console.warn("Firebase config is missing or incomplete. Data persistence disabled.");
-                firebaseInitialized = false;
-                setTimeout(() => showMateriaSelection(), 2000);
-                return;
-            }
-            
-            // Intentamos inicializar con la configuración proporcionada
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            setLogLevel('debug'); 
-            firebaseInitialized = true; // Marcamos que la inicialización básica ocurrió
-
             try {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                userId = auth.currentUser?.uid || crypto.randomUUID();
-                console.log("Firebase Auth successful. User ID:", userId);
+                const response = await fetch(SCRIPT_URL);
+                if (!response.ok) throw new Error('No se pudo conectar con la base de datos.');
                 
+                allQuestionsFromSheet = await response.json();
+                console.log(`Cargadas ${allQuestionsFromSheet.length} preguntas en total desde Google Sheets.`);
+                updateConnectionStatus('online');
+                showMateriaSelection();
             } catch (error) {
-                // Capturamos cualquier error real de Firebase (p. ej., clave API inválida o auth/configuration-not-found)
-                console.error("Firebase Auth or Initialization Error:", error);
-                
-                // Si la autenticación falla, usamos un ID temporal y alertamos al usuario
-                userId = crypto.randomUUID(); 
-                firebaseInitialized = false; // Deshabilitamos la interacción con Firestore
-                
-                let errorMessage = "Error: La autenticación falló. Las preguntas NO se guardarán en la nube. Usando guardado LOCAL.";
-                
-                if (error.code === 'auth/configuration-not-found') {
-                    errorMessage = "⛔ ERROR CRÍTICO (AUTH) ⛔: La persistencia de datos falló. Habilita 'Authentication' (proveedor Anónimo) en la consola de Firebase. Usando guardado LOCAL.";
-                } else {
-                    errorMessage = "Error de conexión a la nube. Usando guardado LOCAL. Revisa tus reglas de seguridad.";
-                }
-                
-                loadingMessage.textContent = errorMessage;
-                // Dejamos un delay para que el usuario pueda leer el mensaje de error antes de continuar
-                setTimeout(() => showMateriaSelection(), 4000); 
-                return;
+                console.error("Error al inicializar la aplicación:", error);
+                loadingMessage.textContent = "Error al conectar con la base de datos. Revisa la URL del script y los permisos de la hoja.";
+                updateConnectionStatus('offline');
             }
-            
-            // Si la autenticación fue exitosa o si se saltó el error (en caso de que el timeout no se haya ejecutado),
-            // llamamos a showMateriaSelection aquí.
-            showMateriaSelection();
-        }
-
-        function getQuizDocRef(materiaId) {
-            if (!db || !userId) return null;
-            return doc(db, 'artifacts', appId, 'users', userId, 'quiz_data', materiaId);
         }
         
-        function loadFullQuestionsList() {
-            if (!currentMateria) return;
-            
-            if (unsubscribeFromQuiz) {
-                unsubscribeFromQuiz();
-                unsubscribeFromQuiz = null;
-            }
-
-            const materiaConfig = MATERIAS[currentMateria];
-            let questionsLoaded = false;
-            let isInitialLoad = true;
-            
-            // 1. Intento de carga desde Firestore (solo si Firebase está inicializado)
-            if (firebaseInitialized) {
-                const quizDocRef = getQuizDocRef(currentMateria);
-                if (quizDocRef) {
-                    unsubscribeFromQuiz = onSnapshot(quizDocRef, (docSnap) => {
-                        let firebaseDataFound = false;
-                        if (docSnap.exists() && docSnap.data().questions) {
-                            try {
-                                const savedQuestions = JSON.parse(docSnap.data().questions);
-                                if (Array.isArray(savedQuestions) && savedQuestions.length > 0) {
-                                     preguntasMateriaCompleta = savedQuestions;
-                                     firebaseDataFound = true;
-                                     console.log(`Cargadas ${savedQuestions.length} preguntas desde Firestore.`);
-                                }
-                            } catch (e) {
-                                console.error("Error al parsear preguntas guardadas desde Firestore:", e);
-                            }
-                        }
-                        
-                        // 2. Si Firestore falla o está vacío, cargamos localmente
-                        if (!firebaseDataFound) {
-                            const localData = loadLocalQuestions(currentMateria);
-                            if (localData && localData.length > 0) {
-                                preguntasMateriaCompleta = localData;
-                            } else {
-                                preguntasMateriaCompleta = materiaConfig.defaultQuestions;
-                            }
-                        }
-
-                        renderGestionPreguntas(); 
-                        if (isInitialLoad) {
-                            showTemaSelection();
-                            isInitialLoad = false;
-                        }
-
-                    }, (error) => {
-                        console.error("Error al suscribirse a Firestore (cargando localmente):", error);
-                        // Fallback a Local Storage si la suscripción falla
-                        const localData = loadLocalQuestions(currentMateria);
-                        if (localData && localData.length > 0) {
-                            preguntasMateriaCompleta = localData;
-                        } else {
-                            preguntasMateriaCompleta = materiaConfig.defaultQuestions;
-                        }
-                        renderGestionPreguntas();
-                        if (isInitialLoad) {
-                            showTemaSelection();
-                            isInitialLoad = false;
-                        }
-                    });
-                    return; // Terminamos la función para esperar el onSnapshot
-                }
-            } 
-            
-            // 3. Carga local si Firebase no está inicializado o el docRef es nulo
-            const localData = loadLocalQuestions(currentMateria);
-            if (localData && localData.length > 0) {
-                preguntasMateriaCompleta = localData;
-            } else {
-                preguntasMateriaCompleta = materiaConfig.defaultQuestions;
-            }
-            
-            renderGestionPreguntas(); 
-            showTemaSelection();
-        }
-        
-        async function saveAllQuestionsToFirestore(questionsList) {
-             const materiaId = currentMateria;
-
-             // Guardado Local (Prioridad 2)
-             saveLocalQuestions(materiaId, questionsList);
-
-             // Guardado en Firestore (Prioridad 1)
-             if (!firebaseInitialized || !db || !userId || !materiaId) {
-                // Si Firebase no está listo o falló, solo guardamos localmente y retornamos true
-                setFeedback(`Guardado solo localmente. ${!firebaseInitialized ? 'La nube está deshabilitada.' : 'Error de conexión.'}`, false);
-                return true;
-            }
+        async function saveAllQuestionsToSheet(questionsList) {
+             updateConnectionStatus('connecting');
              try {
-                const quizDocRef = getQuizDocRef(materiaId);
-                await setDoc(quizDocRef, {
-                    questions: JSON.stringify(questionsList), 
-                    lastUpdated: serverTimestamp() 
-                }, { merge: false });
-                console.log(`Preguntas guardadas con éxito en Firestore para la materia: ${materiaId}. Total: ${questionsList.length}`);
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Necesario para peticiones simples a Apps Script
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(questionsList)
+                });
+
+                // Con 'no-cors', no podemos leer la respuesta, pero asumimos éxito si no hay error de red.
+                console.log("Petición de guardado enviada a Google Sheets.");
+                allQuestionsFromSheet = questionsList; // Actualizamos la lista local
+                
+                // Filtramos de nuevo para la materia actual
+                preguntasMateriaCompleta = allQuestionsFromSheet.filter(q => q.materia === currentMateria);
+                
+                renderGestionPreguntas();
+                updateConnectionStatus('online');
+                setFeedback('¡Éxito! Petición de guardado enviada a la nube.', false);
                 return true;
             } catch (error) {
-                console.error("Error al guardar preguntas en Firestore:", error);
-                // Mensaje mejorado para el usuario sobre el error más común
-                setFeedback("Advertencia: El guardado en la nube falló. Los datos están guardados localmente.", true);
+                console.error("Error al guardar preguntas:", error);
+                setFeedback("Error al guardar en la nube. Los cambios podrían no persistir.", true);
+                updateConnectionStatus('offline');
                 return false;
             }
         }
@@ -633,10 +468,10 @@
                 return;
             }
 
-            const preguntasPorTema = preguntasMateriaCompleta.reduce((acc, q, index) => {
+            const preguntasPorTema = preguntasMateriaCompleta.reduce((acc, q) => {
                 const tema = q.tema || 'Sin Tema';
                 if (!acc[tema]) acc[tema] = [];
-                acc[tema].push({ ...q, originalIndex: index }); 
+                acc[tema].push(q); 
                 return acc;
             }, {});
 
@@ -669,10 +504,10 @@
                     qElement.classList.add('p-3', 'bg-white', 'border', 'rounded-lg', 'shadow-sm');
                     qElement.innerHTML = `
                         <p class="text-sm font-bold text-indigo-700 mb-2">${index + 1}. ${q.pregunta}</p>
-                        <p class="text-xs text-gray-600 mb-2">Respuesta: ${q.opciones[q.correctaIndex]} </p>
+                        <p class="text-xs text-gray-600 mb-2">Respuesta: ${q.opciones[q.correctaindex]} </p>
                         <div class="flex space-x-2 justify-end">
-                            <button data-index="${q.originalIndex}" class="btn-editar py-1 px-3 text-xs bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition">Editar</button>
-                            <button data-index="${q.originalIndex}" class="btn-eliminar py-1 px-3 text-xs bg-red-500 text-white rounded-md hover:bg-red-600 transition">Eliminar</button>
+                            <button data-id="${q.id}" class="btn-editar py-1 px-3 text-xs bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition">Editar</button>
+                            <button data-id="${q.id}" class="btn-eliminar py-1 px-3 text-xs bg-red-500 text-white rounded-md hover:bg-red-600 transition">Eliminar</button>
                         </div>
                     `;
                     temaBody.appendChild(qElement);
@@ -684,18 +519,18 @@
         }
 
         function openEditModal(event) {
-            const index = parseInt(event.target.dataset.index);
-            const question = preguntasMateriaCompleta[index];
+            const questionId = parseInt(event.target.dataset.id);
+            const question = allQuestionsFromSheet.find(q => q.id === questionId);
 
             if (!question) {
                 setFeedback("Error: Pregunta no encontrada para edición.", true);
                 return;
             }
             
-            editQuestionIndex.value = index;
+            editQuestionId.value = questionId;
             editPregunta.value = question.pregunta;
             editTema.value = question.tema || 'Sin Tema';
-            editCorrectaIndex.value = question.correctaIndex;
+            editCorrectaIndex.value = question.correctaindex;
             editJustificacion.value = question.justificacion || '';
             
             editOpcionesContainer.innerHTML = '';
@@ -714,9 +549,10 @@
         }
 
         async function saveEditChanges() {
-            const index = parseInt(editQuestionIndex.value);
+            const questionId = parseInt(editQuestionId.value);
+            const questionIndex = allQuestionsFromSheet.findIndex(q => q.id === questionId);
 
-            if (isNaN(index) || index < 0 || index >= preguntasMateriaCompleta.length) {
+            if (questionIndex === -1) {
                 setEditFeedback("Error: Índice de pregunta no válido.", true);
                 return;
             }
@@ -726,26 +562,22 @@
             opcionInputs.forEach(input => newOpciones.push(input.value.trim()));
             
             const updatedQuestion = {
+                ...allQuestionsFromSheet[questionIndex],
                 pregunta: editPregunta.value.trim(),
                 opciones: newOpciones,
-                correctaIndex: parseInt(editCorrectaIndex.value),
-                justificacion: editJustificacion.value.trim(),
-                tema: editTema.value.trim()
+                correctaindex: parseInt(editCorrectaIndex.value),
+                justificacion: editJustificacion.value.trim()
             };
 
-            if (updatedQuestion.pregunta.length < 5) {
-                setEditFeedback("La pregunta no puede estar vacía.", true);
-                return;
-            }
-            if (updatedQuestion.correctaIndex < 0 || updatedQuestion.correctaIndex >= updatedQuestion.opciones.length) {
-                setEditFeedback("El índice correcto no es válido.", true);
+            if (updatedQuestion.pregunta.length < 5 || updatedQuestion.opciones.some(o => !o)) {
+                setEditFeedback("La pregunta y las opciones no pueden estar vacías.", true);
                 return;
             }
             
-            const updatedList = [...preguntasMateriaCompleta];
-            updatedList[index] = updatedQuestion;
+            const updatedList = [...allQuestionsFromSheet];
+            updatedList[questionIndex] = updatedQuestion;
 
-            const success = await saveAllQuestionsToFirestore(updatedList);
+            const success = await saveAllQuestionsToSheet(updatedList);
             
             if (success) {
                 setFeedback(`¡Éxito! La pregunta del tema "${updatedQuestion.tema}" fue actualizada.`, false);
@@ -756,22 +588,15 @@
         }
 
         async function deleteQuestion(event) {
-            const index = parseInt(event.target.dataset.index);
+            const questionId = parseInt(event.target.dataset.id);
             
             if (!confirm("¿Estás seguro de que quieres eliminar esta pregunta?")) return;
 
-            if (isNaN(index) || index < 0 || index >= preguntasMateriaCompleta.length) {
-                setFeedback("Error: Índice de pregunta no válido para eliminar.", true);
-                return;
-            }
-
-            const updatedList = preguntasMateriaCompleta.filter((_, i) => i !== index);
-            const success = await saveAllQuestionsToFirestore(updatedList);
+            const updatedList = allQuestionsFromSheet.filter(q => q.id !== questionId);
+            const success = await saveAllQuestionsToSheet(updatedList);
             
             if (success) {
                 setFeedback(`¡Éxito! Se eliminó la pregunta de la lista.`, false);
-            } else {
-                 setFeedback("Error al eliminar la pregunta de la base de datos.", true);
             }
         }
         
@@ -815,6 +640,8 @@
 
         function selectMateria(materiaId) {
             currentMateria = materiaId;
+            preguntasMateriaCompleta = allQuestionsFromSheet.filter(q => q.materia === materiaId);
+            
             const materiaConfig = MATERIAS[materiaId];
             
             temaSelectionContainer.classList.remove('hidden');
@@ -824,10 +651,8 @@
             editorMateriaNombre.textContent = materiaConfig.name;
             currentMateriaName.textContent = materiaConfig.name;
 
-            temaButtons.innerHTML = '<div class="text-center p-4 bg-gray-50 rounded-lg text-gray-700 font-medium flex items-center justify-center"><div class="spinner border-t-2 border-gray-600 w-5 h-5 mr-3"></div> Cargando temas guardados...</div>';
-            noTemasMessage.classList.add('hidden');
-
-            loadFullQuestionsList(); 
+            renderGestionPreguntas();
+            showTemaSelection(); 
         }
 
         function showTemaSelection() {
@@ -879,9 +704,7 @@
             quizContainer.classList.remove('hidden');
             quizHeaderButtons.classList.remove('hidden');
             
-            preguntas = preguntasMateriaCompleta
-                .map((p, index) => ({ ...p, originalIndex: index }))
-                .filter(p => p.tema === tema);
+            preguntas = preguntasMateriaCompleta.filter(p => p.tema === tema);
             reiniciarCuestionario();
         }
 
@@ -996,7 +819,7 @@
             if (!pregunta || !pregunta.justificacion) return;
 
             btnEli5.disabled = true;
-            eli5Container.innerHTML = '<div class="spinner border-t-2 border-teal-600 w-5 h-5"></div>';
+            eli5Container.innerHTML = '<div class="spinner" style="border-top-color: #14b8a6;"></div>';
             eli5Container.classList.remove('hidden');
 
             const systemPrompt = "Explica el siguiente concepto médico o científico como si el lector tuviera 5 años (ELI5). Usa una analogía simple y un lenguaje muy claro. Responde en español.";
@@ -1050,11 +873,11 @@
                              properties: {
                                  pregunta: { type: "STRING" },
                                  opciones: { type: "ARRAY", items: { type: "STRING" } },
-                                 correctaIndex: { type: "INTEGER" },
+                                 correctaindex: { type: "INTEGER" },
                                  justificacion: { type: "STRING" },
                                  tema: { type: "STRING" }
                              },
-                             required: ["pregunta", "opciones", "correctaIndex", "justificacion", "tema"]
+                             required: ["pregunta", "opciones", "correctaindex", "justificacion", "tema"]
                          }
                      }
                  }
@@ -1073,8 +896,8 @@
                 const newQuestions = JSON.parse(jsonString);
 
                 if (Array.isArray(newQuestions) && newQuestions.length > 0) {
-                    const allQuestions = [...preguntasMateriaCompleta, ...newQuestions];
-                    const success = await saveAllQuestionsToFirestore(allQuestions);
+                    const allQuestions = [...allQuestionsFromSheet, ...newQuestions];
+                    const success = await saveAllQuestionsToSheet(allQuestions);
                     if (success) {
                         setFeedback(`¡Éxito! Se generaron y guardaron ${newQuestions.length} nuevas preguntas para el tema "${topic}".`, false);
                         iaGenerateTopicInput.value = '';
@@ -1086,8 +909,8 @@
             } catch(error) {
                  console.error("Error al generar preguntas con IA:", error);
                  let errorMessage = error.message;
-                 if (errorMessage.includes("HTTP Error 401")) {
-                     errorMessage = "Error de Autenticación (401). No se pudo acceder a la IA. Inserta tu clave API.";
+                 if (errorMessage.includes("403")) {
+                     errorMessage = "Error de Autenticación (403). No se pudo acceder a la IA. Inserta tu clave API.";
                  }
                  setFeedback(`Error al generar preguntas: ${errorMessage}`, true);
             } finally {
@@ -1100,51 +923,60 @@
 
         // --- FUNCIONES DE VALIDACIÓN Y CARGA MASIVA ---
         
-        async function verifySingleQuestion() {
-            const index = parseInt(editQuestionIndex.value);
-            const question = { ...preguntasMateriaCompleta[index] };
+        async function verifySingleQuestion(isFromQuiz = false) {
+            const questionId = isFromQuiz ? preguntas[indicePreguntaActual].id : parseInt(editQuestionId.value);
+            const question = allQuestionsFromSheet.find(q => q.id === questionId);
             if (!question) return;
 
-            btnVerifyIa.disabled = true;
-            btnVerifyIa.textContent = "Verificando...";
-            setEditFeedback("Verificando la pregunta y buscando justificación con IA...", false);
+            const button = isFromQuiz ? btnVerifyQuiz : btnVerifyIa;
+            const feedbackEl = isFromQuiz ? verifyQuizFeedback : editFeedback;
+
+            button.disabled = true;
+            feedbackEl.textContent = 'Verificando...';
             
             try {
                 const validatedQuestions = await validateAndRefineQuestions([question]);
                 if (validatedQuestions && validatedQuestions.length > 0) {
-                    const validatedQ = validatedQuestions[0];
-                    // Solo actualizamos los campos que la IA debe cambiar
-                    editCorrectaIndex.value = validatedQ.correctaIndex;
-                    editJustificacion.value = validatedQ.justificacion;
+                    const validatedQ = { ...validatedQuestions[0], id: question.id };
+                    const questionIndex = allQuestionsFromSheet.findIndex(q => q.id === questionId);
+
+                    if (questionIndex === -1) throw new Error("Pregunta no encontrada para actualizar.");
+
+                    const updatedList = [...allQuestionsFromSheet];
+                    updatedList[questionIndex] = validatedQ;
                     
-                    if (validatedQ.correctaIndex !== question.correctaIndex) {
-                        setEditFeedback("¡La IA corrigió la respuesta marcada! Revisa los cambios y haz clic en Guardar.", true);
-                    } else {
-                        setEditFeedback("Verificación exitosa. Justificación mejorada. Haz clic en Guardar.", false);
+                    const success = await saveAllQuestionsToSheet(updatedList);
+
+                    if(success) {
+                        if(isFromQuiz) {
+                             // Actualizar UI del quiz
+                             preguntas[indicePreguntaActual] = validatedQ;
+                             justificacionTexto.textContent = validatedQ.justificacion;
+                             feedbackEl.textContent = '¡Verificado y actualizado!';
+                        } else {
+                            // Actualizar UI del modal
+                            editCorrectaIndex.value = validatedQ.correctaindex;
+                            editJustificacion.value = validatedQ.justificacion;
+                            feedbackEl.textContent = '¡Verificado! Haz clic en Guardar para confirmar.';
+                        }
                     }
+
                 } else {
                     throw new Error("La IA no devolvió una pregunta validada.");
                 }
             } catch (error) {
-                console.error("Error en la verificación individual:", error);
-                let errorMessage = error.message;
-                if (errorMessage.includes("HTTP Error 401")) {
-                     errorMessage = "Error de Autenticación (401). No se pudo acceder a la IA. Inserta tu clave API.";
-                } else if (errorMessage.includes("Timeout")) {
-                     errorMessage = "Tiempo de espera agotado. Intenta de nuevo.";
-                }
-                setEditFeedback(`Fallo en Fact-Check: ${errorMessage}`, true);
+                console.error("Error en la verificación:", error);
+                feedbackEl.textContent = `Error: ${error.message}`;
             } finally {
-                btnVerifyIa.disabled = false;
-                btnVerifyIa.textContent = "✨ Verificar con IA";
+                button.disabled = false;
             }
         }
         
         async function validateAndRefineQuestions(questions) {
              const materiaName = MATERIAS[currentMateria].name;
-             const questionsJsonString = JSON.stringify(questions);
-             const systemPrompt = `Eres un experto revisor y validador de exámenes médicos. Tu tarea es: 1. Revisar la pregunta y las opciones proporcionadas. NO LAS MODIFIQUES. Deben permanecer idénticas. 2. Verifica la precisión de la 'correctaIndex' usando tu conocimiento. Si es incorrecta, corrígela al índice correcto. 3. Mejora o completa el campo 'justificacion' para que sea claro y educativo. 4. Devuelve estrictamente SÓLO la matriz JSON. Los campos 'pregunta' y 'opciones' deben ser textualmente idénticos a los que recibiste. Mantén el 'tema' idéntico.`;
-             const userQuery = `Revisa y refina el siguiente conjunto de preguntas sobre ${materiaName}: ${questionsJsonString}`;
+             const questionsJsonString = JSON.stringify(questions.map(({id, ...q}) => q));
+             const systemPrompt = `Eres un experto revisor. Tu tarea es: 1. NO MODIFIQUES 'pregunta' ni 'opciones'. Deben permanecer idénticas. 2. Verifica la 'correctaindex' y corrígela si es necesario. 3. Mejora la 'justificacion'. 4. Devuelve SÓLO la matriz JSON.`;
+             const userQuery = `Revisa estas preguntas de ${materiaName}: ${questionsJsonString}`;
              const payload = {
                  contents: [{ parts: [{ text: userQuery }] }],
                  systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -1157,11 +989,11 @@
                              properties: {
                                  pregunta: { type: "STRING" },
                                  opciones: { type: "ARRAY", items: { type: "STRING" } },
-                                 correctaIndex: { type: "INTEGER" },
+                                 correctaindex: { type: "INTEGER" },
                                  justificacion: { type: "STRING" },
                                  tema: { type: "STRING" }
                              },
-                             required: ["pregunta", "opciones", "correctaIndex", "justificacion", "tema"]
+                             required: ["pregunta", "opciones", "correctaindex", "justificacion", "tema"]
                          }
                      }
                  }
@@ -1172,25 +1004,22 @@
              const result = await response.json();
              const candidate = result.candidates?.[0];
              if (candidate && candidate.content?.parts?.[0]?.text) {
-                 const jsonString = candidate.content.parts[0].text;
-                 const cleanedJson = cleanJsonString(jsonString);
-                 if (cleanedJson.length === 0) throw new Error("La IA de validación devolvió una respuesta vacía.");
-                 const parsed = JSON.parse(cleanedJson);
-                 // Forzamos que la pregunta y opciones originales se mantengan
+                 const jsonString = cleanJsonString(candidate.content.parts[0].text);
+                 const parsed = JSON.parse(jsonString);
                  return parsed.map((item, index) => ({
                     ...item,
                     pregunta: questions[index].pregunta,
                     opciones: questions[index].opciones
                  }));
              } else {
-                 throw new Error("Respuesta de validación incompleta o fallida.");
+                 throw new Error("Respuesta de validación incompleta.");
              }
         }
 
         async function structurePastedText(rawText, tema) {
              const materiaName = MATERIAS[currentMateria].name;
-             const systemPrompt = `Eres un asistente de entrada de datos experto en ${materiaName}. Tu única tarea es convertir el siguiente texto, que contiene múltiples preguntas de opción múltiple, en una matriz JSON. Cada objeto en la matriz debe tener las siguientes claves: "pregunta" (string), "opciones" (array de 4 strings), "correctaIndex" (integer 0-3), y "justificacion" (string). Si no encuentras una justificación, déjala como un string vacío. El campo "tema" para TODAS las preguntas debe ser exactamente "${tema}". Responde estrictamente SÓLO con la matriz JSON, sin ningún texto adicional o explicaciones.`;
-             const userQuery = `Aquí está el texto para procesar:\n\n${rawText}`;
+             const systemPrompt = `Convierte el siguiente texto de preguntas de ${materiaName} en una matriz JSON con los campos: "pregunta", "opciones" (array de 4 strings), "correctaindex" (integer 0-3), y "justificacion". El campo "tema" para TODAS las preguntas debe ser "${tema}". Responde SÓLO con la matriz JSON.`;
+             const userQuery = `Texto a procesar:\n\n${rawText}`;
 
              const payload = {
                  contents: [{ parts: [{ text: userQuery }] }],
@@ -1204,11 +1033,11 @@
                              properties: {
                                  pregunta: { type: "STRING" },
                                  opciones: { type: "ARRAY", items: { type: "STRING" } },
-                                 correctaIndex: { type: "INTEGER" },
+                                 correctaindex: { type: "INTEGER" },
                                  justificacion: { type: "STRING" },
                                  tema: { type: "STRING" }
                              },
-                             required: ["pregunta", "opciones", "correctaIndex", "justificacion", "tema"]
+                             required: ["pregunta", "opciones", "correctaindex", "justificacion", "tema"]
                          }
                      }
                  }
@@ -1221,12 +1050,10 @@
              const candidate = result.candidates?.[0];
 
              if (candidate && candidate.content?.parts?.[0]?.text) {
-                 const jsonString = candidate.content.parts[0].text;
-                 const cleanedJson = cleanJsonString(jsonString);
-                 if (cleanedJson.length === 0) throw new Error("La IA de estructuración devolvió una respuesta vacía.");
-                 return JSON.parse(cleanedJson);
+                 const jsonString = cleanJsonString(candidate.content.parts[0].text);
+                 return JSON.parse(jsonString);
              } else {
-                 throw new Error("La respuesta de la IA para estructurar el texto fue incompleta o falló.");
+                 throw new Error("La IA no pudo estructurar el texto.");
              }
         }
 
@@ -1234,43 +1061,42 @@
             const rawText = textoPdf.value.trim();
             const tema = temaInput.value.trim();
             if (!tema) {
-                setFeedback("¡El campo 'Tema a Asignar' es obligatorio para la carga masiva!", true);
+                setFeedback("¡El campo 'Tema a Asignar' es obligatorio!", true);
                 return;
             }
             if (rawText.length < 20) {
-                setFeedback("Pega un texto más largo que contenga al menos una pregunta completa.", true);
+                setFeedback("Pega un texto más largo.", true);
                 return;
             }
 
             btnAnalizar.disabled = true;
             analizarSpinner.classList.remove('hidden');
             analizarText.textContent = 'Analizando...';
-            setFeedback('Estructurando el texto con la IA...', false);
             
             try {
-                // Llama a la nueva función simple
-                const newQuestions = await structurePastedText(rawText, tema);
-                
-                if (!Array.isArray(newQuestions) || newQuestions.length === 0) {
-                    throw new Error("La IA no pudo estructurar el texto. Revisa el formato del texto pegado.");
+                const newQuestionsRaw = await structurePastedText(rawText, tema);
+                if (!Array.isArray(newQuestionsRaw) || newQuestionsRaw.length === 0) {
+                    throw new Error("La IA no pudo estructurar el texto.");
                 }
 
-                const allQuestions = [...preguntasMateriaCompleta, ...newQuestions];
-                const success = await saveAllQuestionsToFirestore(allQuestions);
+                const newQuestions = newQuestionsRaw.map(q => ({
+                    ...q,
+                    materia: currentMateria,
+                    id: Date.now() + Math.random() // Simple unique ID
+                }));
+
+                const allQuestions = [...allQuestionsFromSheet, ...newQuestions];
+                const success = await saveAllQuestionsToSheet(allQuestions);
 
                 if (success) {
-                    setFeedback(`¡Éxito! Se cargaron y guardaron ${newQuestions.length} nuevas preguntas para el tema "${tema}".`, false);
+                    setFeedback(`¡Éxito! Se cargaron ${newQuestions.length} nuevas preguntas para el tema "${tema}".`, false);
                     textoPdf.value = '';
                     temaInput.value = '';
                 }
 
             } catch (error) {
                 console.error("Error en la carga masiva:", error);
-                let errorMessage = error.message;
-                if (errorMessage.includes("401")) {
-                    errorMessage = "Error de Autenticación (401). No se pudo conectar con la IA. Inserta tu clave API.";
-                }
-                setFeedback(`Error: ${errorMessage}`, true);
+                setFeedback(`Error: ${error.message}`, true);
             } finally {
                 btnAnalizar.disabled = false;
                 analizarSpinner.classList.add('hidden');
@@ -1339,15 +1165,13 @@
             const opcionesBotones = document.querySelectorAll('.opcion-btn');
             const botonSeleccionado = event.target;
             seleccionActual = parseInt(botonSeleccionado.dataset.index);
-            const esCorrecta = seleccionActual === pregunta.correctaIndex;
+            const esCorrecta = seleccionActual === pregunta.correctaindex;
 
             opcionesBotones.forEach((btn, index) => {
                 btn.disabled = true;
-                // Siempre marca la respuesta correcta en verde para que el usuario aprenda.
-                if (index === pregunta.correctaIndex) {
+                if (index === pregunta.correctaindex) {
                     btn.classList.add('correcta');
                 } 
-                // Si la opción seleccionada NO es la correcta, márcala en rojo.
                 else if (index === seleccionActual) {
                     btn.classList.add('incorrecto');
                 }
@@ -1366,7 +1190,7 @@
             feedbackContainer.classList.add('visible-transition');
 
             if (pregunta.justificacion && pregunta.justificacion.trim() !== "") {
-                 justificacionTexto.textContent = pregunta.justificacion.trim();
+                 justificacionTexto.textContent = pregunta.justificacion;
                  justificacionBox.classList.remove('hidden');
                  btnVerifyQuiz.style.display = 'block';
             } else {
@@ -1383,73 +1207,19 @@
             }
         }
         
-        async function verifyCurrentQuestionInQuiz() {
-            const preguntaActual = preguntas[indicePreguntaActual];
-            if (!preguntaActual) return;
-
-            btnVerifyQuiz.disabled = true;
-            verifyQuizFeedback.textContent = 'Verificando...';
-            verifyQuizFeedback.className = 'mt-2 text-xs text-center text-blue-600';
-
-            try {
-                const { originalIndex, ...questionToVerify } = preguntaActual;
-                
-                const validatedQuestions = await validateAndRefineQuestions([questionToVerify]);
-
-                if (!validatedQuestions || validatedQuestions.length === 0) {
-                    throw new Error("La IA no devolvió una pregunta validada.");
-                }
-
-                const validatedQ = validatedQuestions[0];
-                
-                // --- Actualización de lista completa para guardado ---
-                const updatedList = [...preguntasMateriaCompleta];
-                updatedList[originalIndex] = validatedQ;
-
-                const success = await saveAllQuestionsToFirestore(updatedList);
-
-                if (success) {
-                    // Actualizamos la pregunta en la lista actual de la sesión
-                    preguntas[indicePreguntaActual] = { ...validatedQ, originalIndex: originalIndex };
-                    justificacionTexto.textContent = validatedQ.justificacion;
-                    
-                    // Repintamos el estado de las opciones basándonos en la nueva respuesta correcta
-                    const opcionesBotones = document.querySelectorAll('.opcion-btn');
-                    opcionesBotones.forEach((btn, index) => {
-                        btn.classList.remove('correcto', 'incorrecto');
-                        if (index === validatedQ.correctaIndex) {
-                            btn.classList.add('correcto');
-                        } else if (index === seleccionActual) {
-                            btn.classList.add('incorrecto');
-                        }
-                    });
-
-                    if (preguntaActual.correctaIndex !== validatedQ.correctaIndex) {
-                         verifyQuizFeedback.textContent = '¡La IA ha corregido la respuesta! La vista ha sido actualizada.';
-                         verifyQuizFeedback.className = 'mt-2 text-xs text-center text-red-600 font-bold';
-                    } else {
-                         verifyQuizFeedback.textContent = 'Verificación completa. La justificación ha sido actualizada.';
-                         verifyQuizFeedback.className = 'mt-2 text-xs text-center text-green-600';
-                    }
-                } else {
-                    // El guardado en la nube falló, pero el local fue exitoso.
-                    verifyQuizFeedback.textContent = 'Verificación exitosa. La justificación fue actualizada localmente.';
-                    verifyQuizFeedback.className = 'mt-2 text-xs text-center text-yellow-700';
-                }
-
-            } catch(error) {
-                console.error("Error al verificar la pregunta en el quiz:", error);
-                let errorMessage = error.message;
-                if (errorMessage.includes("401") || errorMessage.includes("403")) {
-                     errorMessage = "Error de Autenticación (401/403). Debes insertar tu clave API de Gemini.";
-                }
-                verifyQuizFeedback.textContent = `Error: ${errorMessage}`;
-                verifyQuizFeedback.className = 'mt-2 text-xs text-center text-red-600';
-            } finally {
-                btnVerifyQuiz.disabled = false;
+        // --- MANEJO DE VISTAS DEL EDITOR ---
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[i], array[j]];
             }
         }
 
+        function toggleCargaMasiva() {
+            cargaMasivaContainer.classList.toggle('hidden');
+            const isHidden = cargaMasivaContainer.classList.contains('hidden');
+            btnToggleCargaMasiva.textContent = isHidden ? 'Mostrar Carga Masiva de Texto' : 'Ocultar Carga Masiva de Texto';
+        }
 
         function siguientePregunta() {
             if (!respuestaComprobada) return;
@@ -1480,20 +1250,6 @@
             cargarPregunta();
         }
 
-        // --- MANEJO DE VISTAS DEL EDITOR ---
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[i], array[j]];
-            }
-        }
-
-        function toggleCargaMasiva() {
-            cargaMasivaContainer.classList.toggle('hidden');
-            const isHidden = cargaMasivaContainer.classList.contains('hidden');
-            btnToggleCargaMasiva.textContent = isHidden ? 'Mostrar Carga Masiva de Texto' : 'Ocultar Carga Masiva de Texto';
-        }
-
         // --- LISTENERS DE EVENTOS ---
         btnSiguiente.addEventListener('click', siguientePregunta);
         btnReiniciar.addEventListener('click', reiniciarCuestionario);
@@ -1502,20 +1258,20 @@
         btnVolverMateria.addEventListener('click', showMateriaSelection);
         btnCancelEdit.addEventListener('click', () => editModalOverlay.classList.add('hidden'));
         btnSaveEdit.addEventListener('click', saveEditChanges);
-        btnVerifyIa.addEventListener('click', verifySingleQuestion);
-        // ✨ Listeners para nuevas funciones de IA ✨
+        btnVerifyIa.addEventListener('click', () => verifySingleQuestion(false));
+        btnVerifyQuiz.addEventListener('click', () => verifySingleQuestion(true));
+        
         btnPista.addEventListener('click', getHint);
         btnEli5.addEventListener('click', getELI5Explanation);
         btnIaGenerate.addEventListener('click', generateReviewQuestions);
-        btnVerifyQuiz.addEventListener('click', verifyCurrentQuestionInQuiz);
-        // Listener para Carga Masiva
+        
         btnToggleCargaMasiva.addEventListener('click', toggleCargaMasiva);
         btnAnalizar.addEventListener('click', analyzePastedText);
 
 
         // --- INICIO DE LA APLICACIÓN ---
         window.onload = function() {
-            initFirebase();
+            initApp();
         }
     </script>
 </body>
