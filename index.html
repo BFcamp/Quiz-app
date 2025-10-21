@@ -423,10 +423,9 @@
                 if (!response.ok) throw new Error('No se pudo conectar con la base de datos.');
                 
                 const rawData = await response.json();
-                // FIX: Filtro robusto para datos inválidos o incompletos desde la hoja de cálculo
-                allQuestionsFromSheet = rawData.filter(q => q && q.pregunta && q.materia && q.tema && q.id !== null && typeof q.id !== 'undefined');
+                allQuestionsFromSheet = rawData.filter(q => q && q.pregunta && q.materia && q.tema && q.id != null && typeof q.correctaindex === 'number' && Array.isArray(q.opciones) && q.opciones.length > 0);
 
-                console.log(`Cargadas ${allQuestionsFromSheet.length} preguntas en total desde Google Sheets.`);
+                console.log(`Cargadas ${allQuestionsFromSheet.length} preguntas válidas en total desde Google Sheets.`);
                 updateConnectionStatus('online');
                 showMateriaSelection();
             } catch (error) {
@@ -441,16 +440,13 @@
              try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Necesario para peticiones simples a Apps Script
+                    mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(questionsList)
                 });
-
-                // Con 'no-cors', no podemos leer la respuesta, pero asumimos éxito si no hay error de red.
-                console.log("Petición de guardado enviada a Google Sheets.");
-                allQuestionsFromSheet = questionsList; // Actualizamos la lista local
                 
-                // Filtramos de nuevo para la materia actual
+                console.log("Petición de guardado enviada a Google Sheets.");
+                allQuestionsFromSheet = questionsList;
                 preguntasMateriaCompleta = allQuestionsFromSheet.filter(q => q.materia === currentMateria);
                 
                 renderGestionPreguntas();
@@ -510,7 +506,7 @@
                 listaPreguntas.forEach((q, index) => {
                     const qElement = document.createElement('div');
                     qElement.classList.add('p-3', 'bg-white', 'border', 'rounded-lg', 'shadow-sm');
-                    const respuestaCorrecta = (q.correctaindex !== null && q.opciones && q.opciones[q.correctaindex]) ? q.opciones[q.correctaindex] : 'Índice no válido';
+                    const respuestaCorrecta = (typeof q.correctaindex === 'number' && q.opciones && q.opciones[q.correctaindex]) ? q.opciones[q.correctaindex] : 'Índice no válido';
                     qElement.innerHTML = `
                         <p class="text-sm font-bold text-indigo-700 mb-2">${index + 1}. ${q.pregunta}</p>
                         <p class="text-xs text-gray-600 mb-2">Respuesta: ${respuestaCorrecta} </p>
@@ -692,6 +688,7 @@
             } else {
                 noTemasMessage.classList.remove('hidden');
             }
+            btnGoToEditor.style.display = 'block'; // Always show the editor button
         }
         
         function selectTema(tema) {
@@ -714,6 +711,10 @@
                 btnAlternarVista.textContent = 'Mostrar Cuestionario';
                 editorFeedback.classList.add('hidden'); 
             } else {
+                 if(!currentTema && preguntasMateriaCompleta.length > 0) {
+                    showTemaSelection();
+                    return;
+                }
                 vistaActual = 'quiz';
                 editorContainer.classList.add('hidden');
                 quizContainer.classList.remove('hidden');
