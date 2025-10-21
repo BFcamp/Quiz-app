@@ -158,8 +158,9 @@
                 <h3 class="text-lg font-bold text-gray-700 mb-3">Carga Masiva desde Texto</h3>
                 <div class="mb-4">
                      <label for="tema-input" class="block text-sm font-medium text-gray-700 mb-1">Tema a Asignar (Obligatorio)</label>
-                     <input type="text" id="tema-input" placeholder="Escribe un tema para estas preguntas" 
+                     <input type="text" id="tema-input" list="temas-existentes" placeholder="Escribe o selecciona un tema" 
                             class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500">
+                     <datalist id="temas-existentes"></datalist>
                 </div>
                 
                 <textarea id="texto-pdf" rows="6" placeholder="Pega aquí el texto sin formato de tus preguntas (Ej: 'Pregunta 1. ¿Antídoto...? a) Opción b) Correcta c) Opción... JUSTIFICACIÓN: ...') "
@@ -395,6 +396,7 @@
         const btnAnalizar = document.getElementById('btn-analizar');
         const analizarText = document.getElementById('analizar-text');
         const analizarSpinner = document.getElementById('analizar-spinner');
+        const temasExistentesDatalist = document.getElementById('temas-existentes');
 
 
         // --- GOOGLE SHEETS Y PERSISTENCIA DE DATOS ---
@@ -418,8 +420,7 @@
             loadingMessage.textContent = 'Cargando preguntas desde la nube...';
             
             try {
-                // FIX: Añadir parámetro de cache-busting
-                const response = await fetch(SCRIPT_URL + '?cachebust=' + new Date().getTime());
+                const response = await fetch(SCRIPT_URL + '?cachebust=' + new Date().getTime(), { cache: 'no-store' });
                 if (!response.ok) throw new Error('No se pudo conectar con la base de datos.');
                 
                 const rawData = await response.json();
@@ -688,7 +689,7 @@
             } else {
                 noTemasMessage.classList.remove('hidden');
             }
-            btnGoToEditor.style.display = 'block'; // Always show the editor button
+            btnGoToEditor.style.display = 'block';
         }
         
         function selectTema(tema) {
@@ -710,6 +711,7 @@
                 editorContainer.classList.remove('hidden');
                 btnAlternarVista.textContent = 'Mostrar Cuestionario';
                 editorFeedback.classList.add('hidden'); 
+                populateTemaDatalist();
             } else {
                  if(!currentTema && preguntasMateriaCompleta.length > 0) {
                     showTemaSelection();
@@ -725,6 +727,16 @@
                     mostrarResultados();
                 }
             }
+        }
+        
+        function populateTemaDatalist() {
+            temasExistentesDatalist.innerHTML = '';
+            const temasUnicos = getUniqueThemes();
+            temasUnicos.forEach(tema => {
+                const option = document.createElement('option');
+                option.value = tema;
+                temasExistentesDatalist.appendChild(option);
+            });
         }
 
         function setFeedback(message, isError = false) {
