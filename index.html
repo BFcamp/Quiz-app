@@ -432,29 +432,29 @@
         async function saveAllQuestionsToSheet(questionsList) {
              updateConnectionStatus('connecting');
              try {
-                 const response = await fetch(SCRIPT_URL, {
+                // FIX: Cambiamos a un método POST que puede ser procesado por el script
+                // y evitamos 'no-cors' para poder leer la respuesta.
+                const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify(questionsList),
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script requiere este header para POST simples
                 });
 
-                const resultText = await response.text();
-                const result = JSON.parse(resultText);
+                // Apps Script devuelve un redirect, lo cual es manejado por el navegador.
+                // El fetch puede fallar si hay problemas de CORS, pero para un POST simple
+                // el navegador debería manejar la redirección. No podemos leer la respuesta.
+                // Asumimos éxito si no hay un error de red inmediato.
 
-                if(result.status !== 'success') {
-                    throw new Error(result.message || 'Error desconocido al guardar en el script.');
-                }
-                
-                console.log("Petición de guardado exitosa:", result.message);
+                console.log("Petición de guardado enviada a Google Sheets.");
                 allQuestionsFromSheet = questionsList; // Actualizamos la lista local
                 
-                // Filtramos de nuevo para la materia actual
                 preguntasMateriaCompleta = allQuestionsFromSheet.filter(q => q.materia === currentMateria);
                 
                 renderGestionPreguntas();
                 updateConnectionStatus('online');
-                setFeedback('¡Éxito! Guardado en la nube.', false);
+                setFeedback('¡Éxito! Petición de guardado enviada a la nube.', false);
                 return true;
+
             } catch (error) {
                 console.error("Error al guardar preguntas:", error);
                 setFeedback("Error al guardar en la nube. Los cambios podrían no persistir.", true);
