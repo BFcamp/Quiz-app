@@ -414,7 +414,8 @@
             loadingMessage.textContent = 'Cargando preguntas desde la nube...';
             
             try {
-                const response = await fetch(SCRIPT_URL);
+                // FIX: Añadir parámetro de cache-busting
+                const response = await fetch(SCRIPT_URL + '?cachebust=' + new Date().getTime());
                 if (!response.ok) throw new Error('No se pudo conectar con la base de datos.');
                 
                 allQuestionsFromSheet = await response.json();
