@@ -22,7 +22,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js" crossorigin></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js" crossorigin></script>
   
-  <!-- 4. Cargar Babel (¡CORREGIDO! Versión 7, que es compatible con React 18) -->
+  <!-- 4. Cargar Babel (Versión 7, compatible con React 18) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js" crossorigin></script>
 
   <!-- 5. Tu código React (type="text/babel" es crucial) -->
@@ -83,6 +83,11 @@
         </svg>
     );
 
+    // --- Función de ID Universal ---
+    const generateId = () => {
+      // Un método compatible con todos los navegadores
+      return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+    };
 
     // --- Funciones de Utilidad de Fecha (Modificadas) ---
     const getTodayISO = () => new Date().toISOString().split('T')[0];
@@ -438,13 +443,4 @@
                       );
                     })}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
-
-    // --- Componente ProjectsView (Prop `onStartTimer` añadida) ---
-    const ProjectsView = 
+  
