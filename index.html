@@ -7,7 +7,7 @@
   <!-- 1. Cargar Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Estilo para que los inputs de fecha y hora muestren el icono */
+    /* Estilo para que los inputs de fecha y hora muestren el icono en modo oscuro */
     input[type="date"],
     input[type="time"] {
       color-scheme: dark;
@@ -18,16 +18,16 @@
   <!-- 2. El div raíz donde se montará React -->
   <div id="root"></div>
 
-  <!-- 3. Cargar las librerías de React y ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- 3. Cargar las librerías de React y ReactDOM (Versiones 18) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js" crossorigin></script>
   
-  <!-- 4. Cargar Babel (el compilador de JSX) -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- 4. Cargar Babel (¡CORREGIDO! Versión 7, que es compatible con React 18) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js" crossorigin></script>
 
-  <!-- 5. Tu código React (¡OJO al type="text/babel"!) -->
+  <!-- 5. Tu código React (type="text/babel" es crucial) -->
   <script type="text/babel">
-    // Todo tu código React (el que estaba en el .jsx) va aquí
+    // Hacemos que las funciones de React estén disponibles
     const { useState, useEffect, useMemo, useCallback } = React;
 
     // --- Iconos (Añadido StudyIcon) ---
@@ -447,7 +447,4 @@
     };
 
     // --- Componente ProjectsView (Prop `onStartTimer` añadida) ---
-    const ProjectsView = ({ 
-      projects, tasks, onAddProject, onUpdateProject, onDeleteProject, 
-      onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer
-    }
+    const ProjectsView = 
