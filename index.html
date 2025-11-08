@@ -1,0 +1,1439 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+// --- Iconos (Añadido StudyIcon) ---
+const CalendarIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+const ProjectIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+  </svg>
+);
+const DashboardIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+  </svg>
+);
+const NoteIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+// --- NUEVO ICONO DE ESTUDIO ---
+const StudyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v11.494m0 0A5.001 5.001 0 0018 20V7.5a5.002 5.002 0 00-5.001-4.993A5.002 5.002 0 007 7.5v12.5a5.001 5.001 0 005-2.253z" />
+  </svg>
+);
+const PlusIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+  </svg>
+);
+const TrashIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+);
+const EditIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+);
+const ClockIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const TimerIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
+
+// --- Funciones de Utilidad de Fecha (Modificadas) ---
+const getTodayISO = () => new Date().toISOString().split('T')[0];
+
+const getTomorrowISO = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+};
+const getSevenDaysFromNowISO = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split('T')[0];
+};
+const formatDate = (isoDate) => {
+  if (!isoDate) return '';
+  const date = new Date(isoDate + 'T00:00:00'); // Asumir zona horaria local
+  return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+};
+
+// --- Componente TaskItem (Botón de 5 min AÑADIDO) ---
+const TaskItem = ({ task, onToggleComplete, onEdit, onDelete, projects, onStartTimer }) => {
+  const project = projects.find(p => p.id === task.projectId);
+  return (
+    <div className={`flex items-center justify-between p-3 bg-gray-700 rounded-lg shadow mb-3 transition-all duration-200 ${task.completed ? 'opacity-60' : ''}`}>
+      <div className="flex items-center w-full">
+        {/* Este es el botón "Listo" */}
+        <input
+          type="checkbox"
+          checked={task.completed}
+          onChange={() => onToggleComplete(task)}
+          className="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded focus:ring-blue-600"
+        />
+        <div className="ml-4 flex-grow">
+          <p className={`text-lg font-medium text-white ${task.completed ? 'line-through' : ''}`}>
+            {task.text}
+          </p>
+          <div className="flex flex-wrap items-center text-sm text-gray-400 mt-1 gap-x-4 gap-y-1">
+            {task.dueDate && (
+              <span className="flex items-center">
+                <CalendarIcon /> {formatDate(task.dueDate)}
+              </span>
+            )}
+            {task.dueTime && (
+              <span className="flex items-center">
+                <ClockIcon /> {task.dueTime}
+              </span>
+            )}
+            {project && (
+              <span className="flex items-center px-2 py-0.5 bg-gray-600 text-blue-300 rounded-full text-xs font-semibold">
+                <ProjectIcon /> {project.name}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex-shrink-0 flex space-x-2 ml-4">
+        {/* --- NUEVO BOTÓN 5 MIN --- */}
+        <button
+          onClick={() => onStartTimer(task)}
+          className="p-2 text-green-400 hover:text-white hover:bg-green-600 rounded-full transition-colors"
+          aria-label="Iniciar temporizador 5 min"
+        >
+          <TimerIcon />
+        </button>
+        <button
+          onClick={() => onEdit(task)}
+          className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors"
+          aria-label="Editar tarea"
+        >
+          <EditIcon />
+        </button>
+        <button
+          onClick={() => onDelete(task.id)}
+          className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-600 rounded-full transition-colors"
+          aria-label="Eliminar tarea"
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- Componente AddTaskForm (Sin cambios) ---
+const AddTaskForm = ({ onAddTask, projects, defaultDate = '', defaultProjectId = null }) => {
+  const [text, setText] = useState('');
+  const [dueDate, setDueDate] = useState(defaultDate);
+  const [dueTime, setDueTime] = useState('');
+  const [projectId, setProjectId] = useState(defaultProjectId || '');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    onAddTask({
+      text,
+      dueDate,
+      dueTime,
+      projectId: projectId || null,
+      completed: false,
+    });
+    setText('');
+    setDueDate(defaultDate || '');
+    setDueTime('');
+    if (!defaultProjectId) {
+      setProjectId('');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-6 bg-gray-800 rounded-xl shadow-lg mb-8">
+      <h2 className="text-2xl font-bold text-white mb-4">Añadir Nueva Tarea</h2>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="¿Qué tienes que hacer?"
+        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+      />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+        />
+        <input
+          type="time"
+          value={dueTime}
+          onChange={(e) => setDueTime(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+        />
+        <select
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+        >
+          <option value="">Sin Proyecto</option>
+          {projects.map(project => (
+            <option key={project.id} value={project.id}>{project.name}</option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="submit"
+        className="w-full mt-4 p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+      >
+        <PlusIcon /> <span className="ml-2">Añadir Tarea</span>
+      </button>
+    </form>
+  );
+};
+
+// --- Componente DashboardView (Prop `onStartTimer` añadida) ---
+const DashboardView = ({ tasks, projects, onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
+  // --- NUEVO ESTADO PARA CONTROLAR EL FORMULARIO ---
+  const [isFormVisible, setIsFormVisible] = useState(false);
+
+  const today = getTodayISO();
+  const tomorrow = getTomorrowISO();
+  const sevenDaysFromNow = getSevenDaysFromNowISO();
+
+  const todayTasks = useMemo(() =>
+    tasks
+      .filter(task => task.dueDate === today && !task.completed)
+      .sort((a, b) => (a.dueTime || '23:59').localeCompare(b.dueTime || '23:59')),
+    [tasks, today]
+  );
+
+  const weekTasks = useMemo(() =>
+    tasks
+      .filter(task => 
+        task.dueDate >= tomorrow &&
+        task.dueDate <= sevenDaysFromNow &&
+        !task.completed
+      )
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.dueTime || '23:59').localeCompare(b.dueTime || '23:59')),
+    [tasks, tomorrow, sevenDaysFromNow]
+  );
+  
+  const completedTodayTasks = useMemo(() =>
+    tasks
+      .filter(task => task.dueDate === today && task.completed),
+    [tasks, today]
+  );
+
+  return (
+    <div>
+      {/* --- BOTÓN PARA MOSTRAR/OCULTAR FORMULARIO --- */}
+      <div className="mb-6">
+        <button
+          onClick={() => setIsFormVisible(prev => !prev)}
+          className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center shadow-lg"
+        >
+          <PlusIcon />
+          <span className="ml-2">{isFormVisible ? 'Ocultar Formulario' : 'Añadir Nueva Tarea'}</span>
+        </button>
+      </div>
+
+      {/* Render condicional del formulario */}
+      {isFormVisible && (
+        <AddTaskForm onAddTask={onAddTask} projects={projects} defaultDate={today} />
+      )}
+      
+      <section className="mb-8">
+        <h3 className="text-xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Tareas para Hoy ({formatDate(today)})</h3>
+        {todayTasks.length > 0 ? (
+          todayTasks.map(task => (
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              onToggleComplete={onUpdateTask} 
+              onEdit={onEditTask} 
+              onDelete={onDeleteTask}
+              projects={projects}
+              onStartTimer={onStartTimer}
+            />
+          ))
+        ) : (
+          <p className="text-gray-400 p-3 bg-gray-800 rounded-lg">¡Nada para hoy! Puedes añadir una tarea arriba.</p>
+        )}
+      </section>
+
+      <section className="mb-8">
+        <h3 className="text-xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Próximos 7 Días</h3>
+        {weekTasks.length > 0 ? (
+          weekTasks.map(task => (
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              onToggleComplete={onUpdateTask} 
+              onEdit={onEditTask} 
+              onDelete={onDeleteTask}
+              projects={projects}
+              onStartTimer={onStartTimer}
+            />
+          ))
+        ) : (
+          <p className="text-gray-400 p-3 bg-gray-800 rounded-lg">Nada programado para los próximos 7 días.</p>
+        )}
+      </section>
+      
+      <section>
+        <h3 className="text-xl font-semibold text-gray-500 mb-4 border-b border-gray-700 pb-2">Completadas Hoy</h3>
+        {completedTodayTasks.length > 0 ? (
+          completedTodayTasks.map(task => (
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              onToggleComplete={onUpdateTask} 
+              onEdit={onEditTask} 
+              onDelete={onDeleteTask}
+              projects={projects}
+              onStartTimer={onStartTimer}
+            />
+          ))
+        ) : (
+          <p className="text-gray-400 p-3 bg-gray-800 rounded-lg">Aún no has completado tareas hoy.</p>
+        )}
+      </section>
+    </div>
+  );
+};
+
+// --- Componente AgendaView (Calendario) (Sin cambios) ---
+const AgendaView = ({ tasks, onEditTask, projects }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const daysOfWeek = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+  const getCalendarDays = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const daysInMonth = lastDayOfMonth.getDate();
+    
+    let startDayOfWeek = firstDayOfMonth.getDay();
+    if (startDayOfWeek === 0) startDayOfWeek = 6;
+    else startDayOfWeek -= 1; 
+
+    const days = [];
+    const prevLastDay = new Date(year, month, 0).getDate();
+    for (let i = startDayOfWeek; i > 0; i--) {
+      days.push({ 
+        date: new Date(year, month - 1, prevLastDay - i + 1), 
+        isCurrentMonth: false 
+      });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({ 
+        date: new Date(year, month, i), 
+        isCurrentMonth: true 
+      });
+    }
+    const totalCells = 42;
+    const nextDays = totalCells - days.length;
+    for (let i = 1; i <= nextDays; i++) {
+      days.push({ 
+        date: new Date(year, month + 1, i), 
+        isCurrentMonth: false 
+      });
+    }
+    return days;
+  };
+
+  const calendarDays = getCalendarDays();
+  const todayISO = getTodayISO();
+
+  const changeMonth = (offset) => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="flex justify-between items-center mb-6">
+        <button onClick={() => changeMonth(-1)} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&lt;</button>
+        <h2 className="text-2xl font-bold text-white capitalize">
+          {currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+        </h2>
+        <button onClick={() => changeMonth(1)} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&gt;</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center font-semibold text-blue-300 mb-2">
+        {daysOfWeek.map(day => <div key={day}>{day}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {calendarDays.map(({ date, isCurrentMonth }, index) => {
+          const dateISO = date.toISOString().split('T')[0];
+          const tasksForDay = tasks
+            .filter(task => task.dueDate === dateISO)
+            .sort((a, b) => (a.dueTime || '23:59').localeCompare(b.dueTime || '23:59'));
+          
+          const isToday = dateISO === todayISO;
+
+          return (
+            <div 
+              key={index}
+              className={`h-32 rounded-lg p-2 ${isCurrentMonth ? 'bg-gray-700' : 'bg-gray-900 opacity-50'} ${isToday ? 'border-2 border-blue-500' : ''} overflow-y-auto`}
+            >
+              <span className={`font-semibold ${isToday ? 'text-blue-400' : 'text-white'}`}>
+                {date.getDate()}
+              </span>
+              <div className="mt-1">
+                {tasksForDay.map(task => {
+                  const project = projects.find(p => p.id === task.projectId);
+                  return (
+                    <div 
+                      key={task.id}
+                      onClick={() => onEditTask(task)}
+                      className={`text-xs p-1 rounded mb-1 cursor-pointer ${task.completed ? 'bg-green-800 line-through' : 'bg-blue-800'} ${project ? `border-l-2 border-${project.color || 'blue-400'}` : ''} hover:bg-blue-700`}
+                    >
+                      {task.dueTime && <span className="font-bold">{task.dueTime.slice(0,5)}</span>} {task.text}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// --- Componente ProjectsView (Prop `onStartTimer` añadida) ---
+const ProjectsView = ({ 
+  projects, tasks, onAddProject, onUpdateProject, onDeleteProject, 
+  onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer
+}) => {
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+
+  const handleAddProject = (e) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    onAddProject({
+      name: newProjectName,
+      description: newProjectDesc
+    });
+    setNewProjectName('');
+    setNewProjectDesc('');
+  };
+
+  const selectedProject = useMemo(() => 
+    projects.find(p => p.id === selectedProjectId),
+    [projects, selectedProjectId]
+  );
+
+  const tasksForProject = useMemo(() =>
+    selectedProjectId ? tasks.filter(t => t.projectId === selectedProjectId) : [],
+    [tasks, selectedProjectId]
+  );
+  
+  const unassignedTasks = useMemo(() => 
+    tasks.filter(t => !t.projectId && !t.completed),
+    [tasks]
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Columna de Proyectos */}
+      <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-white mb-4">Proyectos</h2>
+        <form onSubmit={handleAddProject} className="mb-6">
+          <input
+            type="text"
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            placeholder="Nombre del nuevo proyecto"
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+          />
+          <textarea
+            value={newProjectDesc}
+            onChange={(e) => setNewProjectDesc(e.target.value)}
+            placeholder="Descripción (opcional)"
+            rows="2"
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+          />
+          <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+            Crear Proyecto
+          </button>
+        </form>
+        
+        <div className="space-y-3">
+          {projects.map(project => (
+            <div 
+              key={project.id}
+              onClick={() => setSelectedProjectId(project.id)}
+              className={`flex justify-between items-center p-4 rounded-lg cursor-pointer ${selectedProjectId === project.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+            >
+              <span className="font-medium">{project.name}</span>
+              <button 
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    onDeleteProject(project.id); 
+                }}
+                className="p-1 text-red-400 hover:text-red-300"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Columna de Detalles del Proyecto */}
+      <div className="lg:col-span-2">
+        {selectedProject ? (
+          <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+            <h2 className="text-3xl font-bold text-white mb-2">{selectedProject.name}</h2>
+            <p className="text-gray-400 mb-6">{selectedProject.description || "Este proyecto no tiene descripción."}</p>
+            
+            <h3 className="text-xl font-semibold text-blue-400 mb-4">Tareas del Proyecto</h3>
+            <AddTaskForm 
+              onAddTask={onAddTask} 
+              projects={projects} 
+              defaultProjectId={selectedProject.id}
+            />
+            <div className="space-y-3">
+              {tasksForProject.length > 0 ? (
+                tasksForProject.map(task => (
+                  <TaskItem 
+                    key={task.id} 
+                    task={task} 
+                    onToggleComplete={onUpdateTask} 
+                    onEdit={onEditTask} 
+                    onDelete={onDeleteTask}
+                    projects={projects}
+                    onStartTimer={onStartTimer}
+                  />
+                ))
+              ) : (
+                <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">Este proyecto no tiene tareas.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-white mb-4">Tareas Sin Asignar</h2>
+            <p className="text-gray-400 mb-4">Aquí están las tareas que no pertenecen a ningún proyecto.</p>
+             <div className="space-y-3">
+              {unassignedTasks.length > 0 ? (
+                unassignedTasks.map(task => (
+                  <TaskItem 
+                    key={task.id} 
+                    task={task} 
+                    onToggleComplete={onUpdateTask} 
+                    onEdit={onEditTask} 
+                    onDelete={onDeleteTask}
+                    projects={projects}
+                    onStartTimer={onStartTimer}
+                  />
+                ))
+              ) : (
+                <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">No hay tareas sin asignar.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- Componente NotesView (Sin cambios) ---
+const NotesView = ({ 
+  noteFolders, notes, onAddFolder, onDeleteFolder, onAddNote, onDeleteNote 
+}) => {
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newNoteContent, setNewNoteContent] = useState('');
+
+  const handleAddFolder = (e) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    onAddFolder({ name: newFolderName });
+    setNewFolderName('');
+  };
+
+  const handleAddNote = (e) => {
+    e.preventDefault();
+    if (!newNoteContent.trim() || !selectedFolderId) return;
+    onAddNote({
+      folderId: selectedFolderId,
+      content: newNoteContent,
+      timestamp: new Date().toISOString()
+    });
+    setNewNoteContent('');
+  };
+
+  const selectedFolder = useMemo(() => 
+    noteFolders.find(f => f.id === selectedFolderId),
+    [noteFolders, selectedFolderId]
+  );
+
+  const notesForFolder = useMemo(() =>
+    selectedFolderId ? notes.filter(n => n.folderId === selectedFolderId).sort((a, b) => b.timestamp.localeCompare(a.timestamp)) : [],
+    [notes, selectedFolderId]
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Columna de Carpetas */}
+      <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6 h-fit">
+        <h2 className="text-2xl font-bold text-white mb-4">Carpetas de Anotaciones</h2>
+        <form onSubmit={handleAddFolder} className="mb-6">
+          <input
+            type="text"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            placeholder="Nombre de la nueva carpeta"
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+          />
+          <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+            Crear Carpeta
+          </button>
+        </form>
+        
+        <div className="space-y-3">
+          {noteFolders.map(folder => (
+            <div 
+              key={folder.id}
+              onClick={() => setSelectedFolderId(folder.id)}
+              className={`flex justify-between items-center p-4 rounded-lg cursor-pointer ${selectedFolderId === folder.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+            >
+              <span className="font-medium">{folder.name}</span>
+              <button 
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    onDeleteFolder(folder.id); 
+                }}
+                className="p-1 text-red-400 hover:text-red-300"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Columna de Notas */}
+      <div className="lg:col-span-2">
+        {selectedFolder ? (
+          <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+            <h2 className="text-3xl font-bold text-white mb-6">{selectedFolder.name}</h2>
+            
+            <form onSubmit={handleAddNote} className="mb-6">
+              <textarea
+                value={newNoteContent}
+                onChange={(e) => setNewNoteContent(e.target.value)}
+                placeholder="Escribe tu anotación o entrada de diario aquí..."
+                rows="5"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+              />
+              <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+                Guardar Anotación
+              </button>
+            </form>
+
+            <div className="space-y-4">
+              {notesForFolder.map(note => (
+                <div key={note.id} className="bg-gray-700 p-4 rounded-lg shadow">
+                  <p className="text-white whitespace-pre-wrap mb-2">{note.content}</p>
+                  <div className="flex justify-between items-center text-xs text-gray-400">
+                    <span>{new Date(note.timestamp).toLocaleString('es-ES')}</span>
+                    <button 
+                      onClick={() => onDeleteNote(note.id)}
+                      className="p-1 text-red-400 hover:text-red-300"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-800 rounded-xl shadow-lg p-6 flex items-center justify-center h-64">
+            <p className="text-gray-400 text-xl">Selecciona o crea una carpeta para ver tus anotaciones.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// --- NUEVO COMPONENTE: PomodoroTimer ---
+const PomodoroTimer = () => {
+  const DEFAULT_TIME = 25 * 60; // 25 minutos en segundos
+  const [time, setTime] = useState(DEFAULT_TIME);
+  const [isActive, setIsActive] = useState(false);
+  const [sessionTime, setSessionTime] = useState(DEFAULT_TIME);
+
+  useEffect(() => {
+    let interval = null;
+    if (isActive && time > 0) {
+      interval = setInterval(() => {
+        setTime((prevTime) => prevTime - 1);
+      }, 1000);
+    } else if (!isActive && time !== 0) {
+      clearInterval(interval);
+    } else if (isActive && time === 0) {
+      clearInterval(interval);
+      // Aquí podrías agregar un sonido o notificación
+      setIsActive(false);
+      setTime(sessionTime); // Reiniciar al tiempo de sesión
+    }
+    return () => clearInterval(interval);
+  }, [isActive, time, sessionTime]);
+
+  const toggleTimer = () => {
+    setIsActive(!isActive);
+  };
+
+  const resetTimer = () => {
+    setIsActive(false);
+    setTime(sessionTime);
+  };
+
+  const adjustTime = (amount) => {
+    if (isActive) return; // No ajustar si está corriendo
+    const newTime = sessionTime + amount * 60;
+    if (newTime > 0) {
+      setSessionTime(newTime);
+      setTime(newTime);
+    }
+  };
+
+  const formatTime = (timeInSeconds) => {
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = timeInSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-xl shadow-lg p-6 text-center">
+      <h2 className="text-2xl font-bold text-white mb-4">Temporizador Pomodoro</h2>
+      <div className="text-8xl font-bold text-blue-400 mb-6">{formatTime(time)}</div>
+      <div className="flex justify-center space-x-4 mb-4">
+        <button
+          onClick={() => adjustTime(-5)}
+          className="p-3 w-16 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 disabled:opacity-50"
+          disabled={isActive}
+        >
+          -5
+        </button>
+        <button
+          onClick={toggleTimer}
+          className={`p-3 w-32 text-white font-semibold rounded-lg ${isActive ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'}`}
+        >
+          {isActive ? 'Pausar' : 'Iniciar'}
+        </button>
+        <button
+          onClick={resetTimer}
+          className="p-3 w-32 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
+        >
+          Reiniciar
+        </button>
+        <button
+          onClick={() => adjustTime(5)}
+          className="p-3 w-16 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 disabled:opacity-50"
+          disabled={isActive}
+        >
+          +5
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- NUEVO COMPONENTE: StudyTaskItem ---
+const StudyTaskItem = ({ task, topic, onToggle, onDelete }) => (
+  <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg shadow mb-3">
+    <div className="flex items-center">
+      <input
+        type="checkbox"
+        checked={task.completed}
+        onChange={() => onToggle(task)}
+        className="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded focus:ring-blue-600"
+      />
+      <div className="ml-4">
+        <p className={`text-lg font-medium text-white ${task.completed ? 'line-through' : ''}`}>
+          {task.text}
+        </p>
+        {topic && (
+          <span className="text-sm px-2 py-0.5 bg-gray-600 text-blue-300 rounded-full">
+            {topic.name}
+          </span>
+        )}
+      </div>
+    </div>
+    <button
+      onClick={() => onDelete(task.id)}
+      className="p-2 text-red-400 hover:text-red-300 rounded-full"
+    >
+      <TrashIcon />
+    </button>
+  </div>
+);
+
+
+// --- NUEVO COMPONENTE: EstudioView ---
+const EstudioView = ({
+  studyTasks, studyTopics, onAddStudyTask, onUpdateStudyTask, onDeleteStudyTask, onAddTopic, onDeleteTopic
+}) => {
+  const [newTopicName, setNewTopicName] = useState('');
+  const [newStudyTaskText, setNewStudyTaskText] = useState('');
+  const [selectedTopicId, setSelectedTopicId] = useState('');
+
+  const handleAddTopic = (e) => {
+    e.preventDefault();
+    if (!newTopicName.trim()) return;
+    onAddTopic({ name: newTopicName });
+    setNewTopicName('');
+  };
+
+  const handleAddTask = (e) => {
+    e.preventDefault();
+    if (!newStudyTaskText.trim()) return;
+    onAddStudyTask({
+      text: newStudyTaskText,
+      topicId: selectedTopicId || null,
+      completed: false,
+    });
+    setNewStudyTaskText('');
+    setSelectedTopicId('');
+  };
+
+  const tasksByTopic = useMemo(() => {
+    const grouped = {};
+    // Agrupar por tema
+    studyTasks.forEach(task => {
+      const topicId = task.topicId || 'unassigned';
+      if (!grouped[topicId]) {
+        grouped[topicId] = [];
+      }
+      grouped[topicId].push(task);
+    });
+    return grouped;
+  }, [studyTasks]);
+
+  return (
+    <div>
+      <PomodoroTimer />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+        
+        {/* Columna de Temas */}
+        <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6 h-fit">
+          <h2 className="text-2xl font-bold text-white mb-4">Temas de Estudio</h2>
+          <form onSubmit={handleAddTopic} className="mb-6">
+            <input
+              type="text"
+              value={newTopicName}
+              onChange={(e) => setNewTopicName(e.target.value)}
+              placeholder="Nuevo tema (ej. React)"
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+            />
+            <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+              Crear Tema
+            </button>
+          </form>
+          <div className="space-y-3">
+            {studyTopics.map(topic => (
+              <div key={topic.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+                <span className="font-medium text-white">{topic.name}</span>
+                <button
+                  onClick={() => onDeleteTopic(topic.id)}
+                  className="p-1 text-red-400 hover:text-red-300"
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Columna de Tareas de Estudio */}
+        <div className="lg:col-span-2 bg-gray-800 rounded-xl shadow-lg p-6">
+          <h2 className="text-2xl font-bold text-white mb-4">Tareas de Estudio</h2>
+          <form onSubmit={handleAddTask} className="mb-6">
+            <input
+              type="text"
+              value={newStudyTaskText}
+              onChange={(e) => setNewStudyTaskText(e.target.value)}
+              placeholder="Nueva tarea de estudio"
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+            />
+            <select
+              value={selectedTopicId}
+              onChange={(e) => setSelectedTopicId(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+            >
+              <option value="">Sin Tema</option>
+              {studyTopics.map(topic => (
+                <option key={topic.id} value={topic.id}>{topic.name}</option>
+              ))}
+            </select>
+            <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+              Añadir Tarea de Estudio
+            </button>
+          </form>
+
+          {/* Lista de Tareas */}
+          <div className="space-y-6">
+            {studyTopics.map(topic => (
+              <div key={topic.id}>
+                <h3 className="text-xl font-semibold text-blue-400 mb-2">{topic.name}</h3>
+                {tasksByTopic[topic.id] && tasksByTopic[topic.id].length > 0 ? (
+                  tasksByTopic[topic.id].map(task => (
+                    <StudyTaskItem
+                      key={task.id}
+                      task={task}
+                      topic={topic}
+                      onToggle={onUpdateStudyTask}
+                      onDelete={onDeleteStudyTask}
+                    />
+                  ))
+                ) : (
+                  <p className="text-gray-400">Sin tareas para este tema.</p>
+                )}
+              </div>
+            ))}
+            {tasksByTopic['unassigned'] && tasksByTopic['unassigned'].length > 0 && (
+              <div>
+                <h3 className="text-xl font-semibold text-gray-500 mb-2">Sin Tema</h3>
+                {tasksByTopic['unassigned'].map(task => (
+                  <StudyTaskItem
+                    key={task.id}
+                    task={task}
+                    topic={null}
+                    onToggle={onUpdateStudyTask}
+                    onDelete={onDeleteStudyTask}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- Componente Modal (Sin cambios) ---
+const Modal = ({ isOpen, onClose, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-lg m-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// --- Componente EditTaskForm (Botón de 5 min ELIMINADO) ---
+const EditTaskForm = ({ task, onUpdate, onClose, projects, onDelete }) => {
+  const [text, setText] = useState(task.text);
+  const [dueDate, setDueDate] = useState(task.dueDate || '');
+  const [dueTime, setDueTime] = useState(task.dueTime || '');
+  const [projectId, setProjectId] = useState(task.projectId || '');
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onUpdate({
+      ...task,
+      text,
+      dueDate,
+      dueTime,
+      projectId: projectId || null,
+    });
+    onClose();
+  };
+  
+  const handleDelete = () => {
+    onDelete(task.id);
+    onClose();
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <h2 className="text-2xl font-bold text-white mb-6">Editar Tarea</h2>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-4"
+      />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+        />
+        <input
+          type="time"
+          value={dueTime}
+          onChange={(e) => setDueTime(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+        />
+        <select
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+        >
+          <option value="">Sin Proyecto</option>
+          {projects.map(project => (
+            <option key={project.id} value={project.id}>{project.name}</option>
+          ))}
+        </select>
+      </div>
+      
+      {showConfirmDelete ? (
+         <div className="flex justify-between items-center mt-6 bg-gray-700 p-4 rounded-lg">
+           <p className="text-white">¿Seguro?</p>
+           <div>
+             <button
+               type="button"
+               onClick={() => setShowConfirmDelete(false)}
+               className="p-2 px-4 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 mr-2"
+             >
+               Cancelar
+             </button>
+             <button
+               type="button"
+               onClick={handleDelete}
+               className="p-2 px-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
+             >
+               Sí, Eliminar
+             </button>
+           </div>
+         </div>
+      ) : (
+        <div className="flex justify-between mt-6">
+          <button
+            type="button"
+            onClick={() => setShowConfirmDelete(true)}
+            className="p-3 px-6 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
+          >
+            Eliminar
+          </button>
+          <div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-3 px-6 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 mr-2"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
+    </form>
+  );
+};
+
+// --- Componente TimerDisplay (Sin cambios) ---
+const TimerDisplay = ({ timer, setTimer, taskName, onTimerDone }) => {
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    if (!timer.active) {
+      setRemaining(0);
+      return;
+    }
+
+    const calculateRemaining = () => {
+      const now = Date.now();
+      const remainingMs = timer.endTime - now;
+      if (remainingMs <= 0) {
+        setRemaining(0);
+        clearInterval(interval);
+        setTimer({ active: false, taskId: null, endTime: 0 });
+        onTimerDone(taskName);
+      } else {
+        setRemaining(remainingMs);
+      }
+    };
+    
+    calculateRemaining(); // Calcular de inmediato
+    const interval = setInterval(calculateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [timer.active, timer.endTime, taskName, onTimerDone, setTimer]);
+
+  if (!timer.active) return null;
+
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
+
+  return (
+    <div className="fixed bottom-4 right-4 bg-gray-700 text-white p-4 rounded-lg shadow-lg flex items-center">
+      <TimerIcon />
+      <div className="ml-2">
+        <div className="font-bold text-lg">{minutes}:{seconds}</div>
+        <div className="text-sm text-gray-300 truncate max-w-xs">{taskName}</div>
+      </div>
+      <button 
+        onClick={() => setTimer({ active: false, taskId: null, endTime: 0 })}
+        className="ml-4 p-1 text-red-400 hover:text-red-300"
+      >
+        &times;
+      </button>
+    </div>
+  );
+};
+
+
+// --- Componente Principal App (Modificado) ---
+export default function App() {
+  const [view, setView] = useState('dashboard');
+  
+  // --- Estados de TAREAS ---
+  const [tasks, setTasks] = useState(() => {
+    const savedTasks = localStorage.getItem('agenda_tasks');
+    return savedTasks ? JSON.parse(savedTasks) : [];
+  });
+  
+  // --- Estados de PROYECTOS ---
+  const [projects, setProjects] = useState(() => {
+    const savedProjects = localStorage.getItem('agenda_projects');
+    return savedProjects ? JSON.parse(savedProjects) : [];
+  });
+  
+  // --- Estados de ANOTACIONES ---
+  const [noteFolders, setNoteFolders] = useState(() => {
+    const saved = localStorage.getItem('agenda_noteFolders');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [notes, setNotes] = useState(() => {
+    const saved = localStorage.getItem('agenda_notes');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // --- NUEVOS Estados de ESTUDIO ---
+  const [studyTasks, setStudyTasks] = useState(() => {
+    const saved = localStorage.getItem('agenda_studyTasks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [studyTopics, setStudyTopics] = useState(() => {
+    const saved = localStorage.getItem('agenda_studyTopics');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  // --- Estados de MODALES ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  
+  // --- Estados de TEMPORIZADOR ---
+  const [timer, setTimer] = useState({ active: false, taskId: null, endTime: 0 });
+  const [timerTaskName, setTimerTaskName] = useState('');
+  const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
+  
+  
+  // --- Efectos de Guardado en LocalStorage ---
+  useEffect(() => {
+    localStorage.setItem('agenda_tasks', JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem('agenda_projects', JSON.stringify(projects));
+  }, [projects]);
+  
+  useEffect(() => {
+    localStorage.setItem('agenda_noteFolders', JSON.stringify(noteFolders));
+  }, [noteFolders]);
+  
+  useEffect(() => {
+    localStorage.setItem('agenda_notes', JSON.stringify(notes));
+  }, [notes]);
+  
+  useEffect(() => {
+    localStorage.setItem('agenda_studyTasks', JSON.stringify(studyTasks));
+  }, [studyTasks]);
+  
+  useEffect(() => {
+    localStorage.setItem('agenda_studyTopics', JSON.stringify(studyTopics));
+  }, [studyTopics]);
+
+
+  // --- Funciones CRUD de Tareas ---
+  const handleAddTask = (taskData) => {
+    const newTask = { ...taskData, id: crypto.randomUUID() };
+    setTasks(prevTasks => [...prevTasks, newTask]);
+  };
+  const handleUpdateTask = (taskToUpdate) => {
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id === taskToUpdate.id ? taskToUpdate : task
+      )
+    );
+  };
+  const handleToggleComplete = (task) => {
+    handleUpdateTask({ ...task, completed: !task.completed });
+  };
+  const handleDeleteTask = (taskId) => {
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  };
+
+  // --- Funciones CRUD de Proyectos ---
+  const handleAddProject = (projectData) => {
+    const newProject = { ...projectData, id: crypto.randomUUID() };
+    setProjects(prevProjects => [...prevProjects, newProject]);
+  };
+  const handleUpdateProject = (projectToUpdate) => {
+     setProjects(prevProjects => 
+       prevProjects.map(p => 
+         p.id === projectToUpdate.id ? projectToUpdate : p
+       )
+     );
+  };
+  const handleDeleteProject = (projectId) => {
+    setTasks(prevTasks => 
+      prevTasks.map(task =>
+        task.projectId === projectId ? { ...task, projectId: null } : task
+      )
+    );
+    setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
+  };
+
+  // --- Funciones CRUD de Anotaciones ---
+  const handleAddNoteFolder = (folderData) => {
+    const newFolder = { ...folderData, id: crypto.randomUUID() };
+    setNoteFolders(prev => [...prev, newFolder]);
+  };
+  const handleDeleteNoteFolder = (folderId) => {
+    setNotes(prev => prev.filter(n => n.folderId !== folderId));
+    setNoteFolders(prev => prev.filter(f => f.id !== folderId));
+  };
+  const handleAddNote = (noteData) => {
+    const newNote = { ...noteData, id: crypto.randomUUID() };
+    setNotes(prev => [...prev, newNote]);
+  };
+  const handleDeleteNote = (noteId) => {
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+  };
+  
+  // --- NUEVAS Funciones CRUD de Estudio ---
+  const handleAddStudyTask = (taskData) => {
+    const newTask = { ...taskData, id: crypto.randomUUID() };
+    setStudyTasks(prev => [...prev, newTask]);
+  };
+  const handleUpdateStudyTask = (taskToUpdate) => {
+    setStudyTasks(prev =>
+      prev.map(task =>
+        task.id === taskToUpdate.id ? { ...task, completed: !task.completed } : task
+      )
+    );
+  };
+  const handleDeleteStudyTask = (taskId) => {
+    setStudyTasks(prev => prev.filter(task => task.id !== taskId));
+  };
+  const handleAddTopic = (topicData) => {
+    const newTopic = { ...topicData, id: crypto.randomUUID() };
+    setStudyTopics(prev => [...prev, newTopic]);
+  };
+  const handleDeleteTopic = (topicId) => {
+    setStudyTasks(prev =>
+      prev.map(task =>
+        task.topicId === topicId ? { ...task, topicId: null } : task
+      )
+    );
+    setStudyTopics(prev => prev.filter(topic => topic.id !== topicId));
+  };
+  
+
+  // --- Funciones de Modal y Temporizador ---
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setIsModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingTask(null);
+  };
+  
+  const handleStartTimer = (task) => {
+    // Si ya hay un timer activo, no hacer nada
+    if (timer.active) return;
+    setTimer({ active: true, taskId: task.id, endTime: Date.now() + 5 * 60 * 1000 });
+    setTimerTaskName(task.text);
+    if(isModalOpen) handleCloseModal(); // Cierra el modal si estaba abierto
+  };
+  
+  const handleTimerDone = (taskName) => {
+    setTimerTaskName(taskName); 
+    setIsTimerModalOpen(true); 
+  };
+  
+  
+  // --- Renderizado ---
+  
+  const renderView = () => {
+    switch (view) {
+      case 'dashboard':
+        return <DashboardView 
+          tasks={tasks} 
+          projects={projects}
+          onAddTask={handleAddTask}
+          onUpdateTask={handleToggleComplete}
+          onDeleteTask={handleDeleteTask}
+          onEditTask={handleEditTask}
+          onStartTimer={handleStartTimer}
+        />;
+      case 'agenda':
+        return <AgendaView 
+          tasks={tasks}
+          projects={projects}
+          onEditTask={handleEditTask}
+        />;
+      case 'projects':
+        return <ProjectsView 
+          projects={projects}
+          tasks={tasks}
+          onAddProject={handleAddProject}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
+          onAddTask={handleAddTask}
+          onUpdateTask={handleToggleComplete}
+          onDeleteTask={handleDeleteTask}
+          onEditTask={handleEditTask}
+          onStartTimer={handleStartTimer}
+        />;
+      case 'notes':
+        return <NotesView
+          noteFolders={noteFolders}
+          notes={notes}
+          onAddFolder={handleAddNoteFolder}
+          onDeleteFolder={handleDeleteNoteFolder}
+          onAddNote={handleAddNote}
+          onDeleteNote={handleDeleteNote}
+        />;
+      // --- NUEVO ---
+      case 'estudio':
+        return <EstudioView
+          studyTasks={studyTasks}
+          studyTopics={studyTopics}
+          onAddStudyTask={handleAddStudyTask}
+          onUpdateStudyTask={handleUpdateStudyTask}
+          onDeleteStudyTask={handleDeleteStudyTask}
+          onAddTopic={handleAddTopic}
+          onDeleteTopic={handleDeleteTopic}
+        />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        
+        <header className="mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
+            <h1 className="text-4xl font-bold text-white mb-4 sm:mb-0">Mi Agenda Digital</h1>
+            <div className="text-xs text-gray-500">Datos guardados localmente</div>
+          </div>
+
+          <nav className="flex justify-center bg-gray-800 rounded-lg p-2 shadow-lg space-x-1 sm:space-x-2">
+            {[
+              { id: 'dashboard', label: 'Inicio', icon: <DashboardIcon /> },
+              { id: 'agenda', label: 'Agenda', icon: <CalendarIcon /> },
+              { id: 'projects', label: 'Proyectos', icon: <ProjectIcon /> },
+              { id: 'notes', label: 'Anotaciones', icon: <NoteIcon /> }, 
+              { id: 'estudio', label: 'Estudio', icon: <StudyIcon /> }, // --- NUEVO ---
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={`flex-1 flex items-center justify-center p-3 font-medium rounded-md transition-colors ${
+                  view === item.id 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                {item.icon}
+                <span className="hidden sm:inline-block">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        <main>
+          {renderView()}
+        </main>
+        
+        {/* Modal de Edición de Tarea */}
+        <Modal isOpen={isModalOpen} onClose={handleCloseModal}>
+          {editingTask && (
+            <EditTaskForm 
+              task={editingTask}
+              onUpdate={handleUpdateTask}
+              onClose={handleCloseModal}
+              onDelete={handleDeleteTask}
+              projects={projects}
+              // onStartTimer ya no se pasa aquí
+            />
+          )}
+        </Modal>
+        
+        {/* Modal de Fin de Temporizador */}
+        <Modal isOpen={isTimerModalOpen} onClose={() => setIsTimerModalOpen(false)}>
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-white mb-4">¡Tiempo!</h2>
+            <p className="text-lg text-gray-300 mb-6">
+              Terminaron los 5 minutos para: <span className="font-semibold text-blue-400">{timerTaskName}</span>
+            </p>
+            <button
+              onClick={() => setIsTimerModalOpen(false)}
+              className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+            >
+              Aceptar
+            </button>
+          </div>
+        </Modal>
+        
+        {/* Display de Temporizador */}
+        <TimerDisplay 
+          timer={timer}
+          setTimer={setTimer}
+          taskName={timerTaskName}
+          onTimerDone={handleTimerDone}
+        />
+        
+      </div>
+    </div>
+  );
+}
