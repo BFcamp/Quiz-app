@@ -1,36 +1,83 @@
-import React, { useState } from 'react';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba de React en HTML</title>
+  
+  <!-- 1. Cargar React y ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  
+  <!-- 2. Cargar Babel (para compilar JSX en el navegador) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    /* Estilos básicos para que se vea bien */
+    body {
+      background-color: #1a202c; /* bg-gray-900 */
+      color: white;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 40px;
+      text-align: center;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+      background-color: #3b82f6; /* bg-blue-600 */
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #2563eb; /* bg-blue-700 */
+    }
+  </style>
+</head>
+<body>
 
-/**
- * Componente de prueba mínimo.
- * Si esto funciona, el error está en el código de la agenda.
- * Si esto NO funciona (y el 'import React' sigue en blanco),
- * el problema es del entorno.
- */
-export default function App() {
-  const [count, setCount] = useState(0);
+  <!-- 3. Este es el 'root' donde React montará la aplicación -->
+  <div id="root"></div>
 
-  return (
-    <div style={{ padding: '40px', color: 'white', textAlign: 'center' }}>
-      <h1 style={{ fontSize: '48px' }}>Prueba de React</h1>
-      <p style={{ fontSize: '24px' }}>Si puedes ver esto, React está funcionando.</p>
-      
-      <div style={{ marginTop: '30px' }}>
-        <p style={{ fontSize: '20px' }}>Contador: {count}</p>
-        <button
-          onClick={() => setCount(count + 1)}
-          style={{
-            padding: '10px 20px',
-            fontSize: '18px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          Click Me
-        </button>
-      </div>
-    </div>
-  );
-}
+  <!-- 4. Este es nuestro código React. 
+       Fíjate en "type='text/babel'"
+  -->
+  <script type="text/babel">
+    // Ya no usamos 'import' porque React está cargado globalmente
+    const { useState } = React;
+
+    /**
+     * Componente de prueba mínimo.
+     * Si esto funciona, ¡podemos poner la agenda completa aquí!
+     */
+    function App() {
+      const [count, setCount] = useState(0);
+
+      return (
+        <div>
+          <h1 style={{ fontSize: '48px' }}>Prueba de React en HTML</h1>
+          <p style={{ fontSize: '24px' }}>Si puedes ver esto, React está funcionando.</p>
+          
+          <div style={{ marginTop: '30px' }}>
+            <p style={{ fontSize: '20px' }}>Contador: {count}</p>
+            <button
+              onClick={() => setCount(count + 1)}
+            >
+              Click Me
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // 5. Renderizar la aplicación en el 'root'
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+
+  </script>
+
+</body>
+</html>
