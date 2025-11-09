@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prueba de React en HTML</title>
+  <title>Agenda Digital</title>
   
   <!-- 1. Cargar React y ReactDOM -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -11,68 +11,1162 @@
   
   <!-- 2. Cargar Babel (para compilar JSX en el navegador) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- 3. Cargar Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
   
   <style>
-    /* Estilos básicos para que se vea bien */
+    /* Estilos globales básicos */
     body {
-      background-color: #1a202c; /* bg-gray-900 */
-      color: white;
-      font-family: sans-serif;
-      margin: 0;
-      padding: 40px;
-      text-align: center;
+      background-color: #111827; /* bg-gray-900 */
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     }
-    button {
-      padding: 10px 20px;
-      font-size: 18px;
-      background-color: #3b82f6; /* bg-blue-600 */
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #2563eb; /* bg-blue-700 */
+    /* Estilos para que el calendario no se vea mal */
+    .rbc-calendar {
+      height: 600px;
     }
   </style>
 </head>
 <body>
 
-  <!-- 3. Este es el 'root' donde React montará la aplicación -->
+  <!-- Este es el 'root' donde React montará la aplicación -->
   <div id="root"></div>
 
-  <!-- 4. Este es nuestro código React. 
-       Fíjate en "type='text/babel'"
-  -->
+  <!-- Todo nuestro código React va aquí adentro -->
   <script type="text/babel">
-    // Ya no usamos 'import' porque React está cargado globalmente
-    const { useState } = React;
+    // --- Hooks de React ---
+    // Ya no usamos 'import', los tomamos del objeto global 'React'
+    const { useState, useEffect, useMemo, useCallback } = React;
 
-    /**
-     * Componente de prueba mínimo.
-     * Si esto funciona, ¡podemos poner la agenda completa aquí!
-     */
-    function App() {
-      const [count, setCount] = useState(0);
+    // --- Función de ID simple ---
+    // Reemplazamos crypto.randomUUID por si acaso
+    const generateId = () => {
+      return '_' + Math.random().toString(36).substr(2, 9);
+    };
+
+    // --- Iconos (Componentes SVG) ---
+    const CalendarIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    );
+    const ProjectIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+    );
+    const DashboardIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+      </svg>
+    );
+    const NotesIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    );
+    const StudyIcon = () => (
+       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.747 0-3.332.477-4.5 1.253" />
+      </svg>
+    );
+    const PlusIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+    );
+    const TrashIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    );
+    const EditIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
+      </svg>
+    );
+    const ClockIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    const TimerIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+
+    // --- Hook Personalizado: useLocalStorage ---
+    function useLocalStorage(key, initialValue) {
+      const [storedValue, setStoredValue] = useState(() => {
+        try {
+          const item = window.localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch (error) {
+          console.error(error);
+          return initialValue;
+        }
+      });
+
+      const setValue = (value) => {
+        try {
+          const valueToStore = value instanceof Function ? value(storedValue) : value;
+          setStoredValue(valueToStore);
+          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        } catch (error) {
+          console.error(error);
+        }
+      };
+
+      return [storedValue, setValue];
+    }
+
+    // --- Funciones de Utilidad de Fecha ---
+    const getTodayISO = () => new Date().toISOString().split('T')[0];
+    const getTomorrowISO = () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString().split('T')[0];
+    };
+    const getNext7DaysISO = () => {
+      const dates = [];
+      for (let i = 1; i <= 7; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+        dates.push(date.toISOString().split('T')[0]);
+      }
+      return dates;
+    };
+    const formatDate = (isoDate) => {
+      if (!isoDate) return '';
+      const date = new Date(isoDate + 'T00:00:00'); // Asumir zona horaria local
+      return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+    };
+
+    // --- Componente Modal ---
+    const Modal = ({ isOpen, onClose, children }) => {
+      if (!isOpen) return null;
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg relative">
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 text-gray-400 hover:text-white"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {children}
+          </div>
+        </div>
+      );
+    };
+
+    // --- Componente TaskItem ---
+    const TaskItem = ({ task, onToggleComplete, onEdit, onDelete, onStartTimer, projects }) => {
+      const project = projects.find(p => p.id === task.projectId);
+      const isCompleted = task.status === 'completed';
+
+      return (
+        <div className={`flex items-center justify-between p-3 bg-gray-800 rounded-lg shadow mb-3 transition-all duration-200 ${isCompleted ? 'opacity-50' : ''}`}>
+          <div className="flex items-center w-full overflow-hidden">
+            <input
+              type="checkbox"
+              checked={isCompleted}
+              onChange={() => onToggleComplete(task.id)}
+              className="form-checkbox h-5 w-5 text-blue-500 bg-gray-900 border-gray-700 rounded focus:ring-blue-600 flex-shrink-0"
+            />
+            <div className="ml-4 flex-grow overflow-hidden">
+              <p className={`text-lg font-medium text-white ${isCompleted ? 'line-through' : ''}`}>
+                {task.text}
+              </p>
+              <div className="flex flex-wrap items-center text-sm text-gray-400 mt-1 gap-x-4 gap-y-1">
+                {task.date && (
+                  <span className="flex items-center">
+                    <CalendarIcon /> {formatDate(task.date)}
+                  </span>
+                )}
+                {task.time && (
+                  <span className="flex items-center">
+                    <ClockIcon /> {task.time}
+                  </span>
+                )}
+                {project && (
+                  <span className="flex items-center px-2 py-0.5 bg-gray-700 text-blue-300 rounded-full text-xs font-semibold">
+                    <ProjectIcon /> {project.name}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex-shrink-0 flex space-x-2 ml-4">
+            <button
+              onClick={() => onStartTimer(task)}
+              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
+              title="Iniciar 5 min"
+            >
+              <TimerIcon />
+            </button>
+            <button
+              onClick={() => onEdit(task)}
+              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
+              title="Editar"
+            >
+              <EditIcon />
+            </button>
+            <button
+              onClick={() => onDelete(task.id)}
+              className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-full transition-colors"
+              title="Eliminar"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Componente AddTaskForm ---
+    const AddTaskForm = ({ onAddTask, projects, defaultDate = '', defaultProjectId = null }) => {
+      const [text, setText] = useState('');
+      const [dueDate, setDueDate] = useState(defaultDate);
+      const [dueTime, setDueTime] = useState('');
+      const [projectId, setProjectId] = useState(defaultProjectId || 'inbox');
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!text.trim()) return;
+        const newTask = {
+          id: generateId(),
+          text,
+          date: dueDate || null,
+          time: dueTime || null,
+          projectId: projectId || 'inbox',
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+        onAddTask(newTask);
+        setText('');
+        setDueDate(defaultDate || '');
+        setDueTime('');
+        if (!defaultProjectId) {
+          setProjectId('inbox');
+        }
+      };
+
+      return (
+        <form onSubmit={handleSubmit} className="p-6 bg-gray-800 rounded-xl shadow-lg mb-8">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="¿Qué tienes que hacer?"
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            />
+            <input
+              type="time"
+              value={dueTime}
+              onChange={(e) => setDueTime(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            />
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            >
+              <option value="inbox">Bandeja de entrada</option>
+              {projects.filter(p => p.id !== 'inbox').map(project => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="w-full mt-4 p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+          >
+            <PlusIcon /> <span className="ml-2">Añadir Tarea</span>
+          </button>
+        </form>
+      );
+    };
+
+    // --- Componente EditTaskForm ---
+    const EditTaskForm = ({ task, onUpdate, onClose, projects }) => {
+      const [text, setText] = useState(task.text);
+      const [dueDate, setDueDate] = useState(task.date || '');
+      const [dueTime, setDueTime] = useState(task.time || '');
+      const [projectId, setProjectId] = useState(task.projectId || 'inbox');
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        onUpdate({
+          ...task,
+          text,
+          date: dueDate || null,
+          time: dueTime || null,
+          projectId,
+        });
+        onClose();
+      };
+
+      return (
+        <form onSubmit={handleSubmit}>
+          <h2 className="text-2xl font-bold text-white mb-6">Editar Tarea</h2>
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-4"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            />
+            <input
+              type="time"
+              value={dueTime}
+              onChange={(e) => setDueTime(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            />
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            >
+              <option value="inbox">Bandeja de entrada</option>
+              {projects.filter(p => p.id !== 'inbox').map(project => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-3 px-6 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 mr-2"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+            >
+              Guardar
+            </button>
+          </div>
+        </form>
+      );
+    };
+
+    // --- Componente FocusTimer ---
+    const FocusTimer = ({ task, onComplete, onClose }) => {
+      const [timeLeft, setTimeLeft] = useState(5 * 60); // 5 minutos
+
+      useEffect(() => {
+        if (timeLeft <= 0) {
+          onComplete();
+          return;
+        }
+        const timerId = setInterval(() => {
+          setTimeLeft(t => t - 1);
+        }, 1000);
+        return () => clearInterval(timerId);
+      }, [timeLeft, onComplete]);
+
+      const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      };
+
+      return (
+        <div className="fixed bottom-4 right-4 bg-gray-700 text-white p-4 rounded-lg shadow-xl z-50">
+          <button onClick={onClose} className="absolute top-1 right-2 text-gray-400 hover:text-white">&times;</button>
+          <div className="text-sm text-gray-300">Enfocado en:</div>
+          <div className="text-lg font-bold truncate max-w-xs">{task.text}</div>
+          <div className="text-3xl font-mono text-center my-2">{formatTime(timeLeft)}</div>
+        </div>
+      );
+    };
+
+    // --- Vista Dashboard (Inicio) ---
+    const DashboardView = ({ tasks, projects, onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
+      const [isFormVisible, setIsFormVisible] = useState(false);
+      const today = getTodayISO();
+      const next7Days = getNext7DaysISO();
+
+      const todayTasks = useMemo(() =>
+        tasks
+          .filter(task => task.date === today && task.status === 'pending')
+          .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+        [tasks, today]
+      );
+
+      const weekTasks = useMemo(() =>
+        tasks
+          .filter(task => next7Days.includes(task.date) && task.status === 'pending')
+          .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '')),
+        [tasks, next7Days]
+      );
+      
+      const completedTodayTasks = useMemo(() =>
+        tasks
+          .filter(task => task.date === today && task.status === 'completed'),
+        [tasks, today]
+      );
 
       return (
         <div>
-          <h1 style={{ fontSize: '48px' }}>Prueba de React en HTML</h1>
-          <p style={{ fontSize: '24px' }}>Si puedes ver esto, React está funcionando.</p>
-          
-          <div style={{ marginTop: '30px' }}>
-            <p style={{ fontSize: '20px' }}>Contador: {count}</p>
+          <div className="mb-6">
             <button
-              onClick={() => setCount(count + 1)}
+              onClick={() => setIsFormVisible(v => !v)}
+              className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
             >
-              Click Me
+              <PlusIcon /> <span className="ml-2">{isFormVisible ? "Ocultar Formulario" : "Añadir Nueva Tarea"}</span>
             </button>
+            {isFormVisible && (
+              <div className="mt-4">
+                <AddTaskForm onAddTask={onAddTask} projects={projects} defaultDate={today} />
+              </div>
+            )}
+          </div>
+          
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Tareas para Hoy ({formatDate(today)})</h3>
+            {todayTasks.length > 0 ? (
+              todayTasks.map(task => (
+                <TaskItem 
+                  key={task.id} 
+                  task={task} 
+                  onToggleComplete={onUpdateTask} 
+                  onEdit={onEditTask} 
+                  onDelete={onDeleteTask}
+                  onStartTimer={onStartTimer}
+                  projects={projects}
+                />
+              ))
+            ) : (
+              <p className="text-gray-400 p-3 bg-gray-800 rounded-lg">¡Nada para hoy!</p>
+            )}
+          </section>
+
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Próximos 7 Días</h3>
+            {weekTasks.length > 0 ? (
+              weekTasks.map(task => (
+                <TaskItem 
+                  key={task.id} 
+                  task={task} 
+                  onToggleComplete={onUpdateTask} 
+                  onEdit={onEditTask} 
+                  onDelete={onDeleteTask}
+                  onStartTimer={onStartTimer}
+                  projects={projects}
+                />
+              ))
+            ) : (
+              <p className="text-gray-400 p-3 bg-gray-800 rounded-lg">Nada programado para los próximos 7 días.</p>
+            )}
+          </section>
+
+          <section>
+            <h3 className="text-2xl font-semibold text-gray-500 mb-4 border-b border-gray-700 pb-2">Completadas Hoy</h3>
+            {completedTodayTasks.length > 0 ? (
+              completedTodayTasks.map(task => (
+                <TaskItem 
+                  key={task.id} 
+                  task={task} 
+                  onToggleComplete={onUpdateTask} 
+                  onEdit={onEditTask} 
+                  onDelete={onDeleteTask}
+                  onStartTimer={onStartTimer}
+                  projects={projects}
+                />
+              ))
+            ) : (
+              <p className="text-gray-500 p-3 bg-gray-800 rounded-lg">Aún no has completado tareas hoy.</p>
+            )}
+          </section>
+        </div>
+      );
+    };
+
+    // --- Vista Agenda (Calendario) ---
+    const AgendaView = ({ tasks, onEditTask, projects }) => {
+      const [currentDate, setCurrentDate] = useState(new Date());
+      const daysOfWeek = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+      const getCalendarDays = () => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const firstDayOfMonth = new Date(year, month, 1);
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        const daysInMonth = lastDayOfMonth.getDate();
+        let startDayOfWeek = firstDayOfMonth.getDay();
+        if (startDayOfWeek === 0) startDayOfWeek = 6;
+        else startDayOfWeek -= 1; 
+        const days = [];
+        const prevLastDay = new Date(year, month, 0).getDate();
+        for (let i = startDayOfWeek; i > 0; i--) {
+          days.push({ date: new Date(year, month - 1, prevLastDay - i + 1), isCurrentMonth: false });
+        }
+        for (let i = 1; i <= daysInMonth; i++) {
+          days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+        }
+        const totalCells = days.length <= 35 ? 35 : 42;
+        const nextDays = totalCells - days.length;
+        for (let i = 1; i <= nextDays; i++) {
+          days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+        }
+        return days;
+      };
+
+      const calendarDays = getCalendarDays();
+      const todayISO = getTodayISO();
+
+      return (
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&lt;</button>
+            <h2 className="text-2xl font-bold text-white capitalize">
+              {currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+            </h2>
+            <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&gt;</button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center font-semibold text-blue-300 mb-2">
+            {daysOfWeek.map(day => <div key={day}>{day}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map(({ date, isCurrentMonth }, index) => {
+              const dateISO = date.toISOString().split('T')[0];
+              const tasksForDay = tasks
+                .filter(task => task.date === dateISO)
+                .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+              const isToday = dateISO === todayISO;
+
+              return (
+                <div 
+                  key={index}
+                  className={`h-32 rounded-lg p-2 ${isCurrentMonth ? 'bg-gray-700' : 'bg-gray-900 opacity-50'} ${isToday ? 'border-2 border-blue-500' : ''} overflow-y-auto`}
+                >
+                  <span className={`font-semibold ${isToday ? 'text-blue-400' : 'text-white'}`}>
+                    {date.getDate()}
+                  </span>
+                  <div className="mt-1">
+                    {tasksForDay.map(task => {
+                      const project = projects.find(p => p.id === task.projectId);
+                      return (
+                        <div 
+                          key={task.id}
+                          onClick={() => onEditTask(task)}
+                          className={`text-xs p-1 rounded mb-1 cursor-pointer ${task.status === 'completed' ? 'bg-green-800 line-through' : 'bg-blue-800'} hover:bg-blue-700`}
+                        >
+                          {task.time && <span className="font-bold">{task.time}</span>} {task.text}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    // --- Vista Proyectos ---
+    const ProjectsView = ({ 
+      projects, tasks, onAddProject, onDeleteProject, 
+      onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer 
+    }) => {
+      const [selectedProjectId, setSelectedProjectId] = useState('inbox');
+      const [newProjectName, setNewProjectName] = useState('');
+
+      const handleAddProject = (e) => {
+        e.preventDefault();
+        if (!newProjectName.trim()) return;
+        onAddProject({ id: generateId(), name: newProjectName, description: '' });
+        setNewProjectName('');
+      };
+
+      const selectedProject = useMemo(() => 
+        projects.find(p => p.id === selectedProjectId),
+        [projects, selectedProjectId]
+      );
+
+      const tasksForProject = useMemo(() =>
+        tasks.filter(t => t.projectId === selectedProjectId),
+        [tasks, selectedProjectId]
+      );
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-white mb-4">Proyectos</h2>
+            <form onSubmit={handleAddProject} className="mb-6">
+              <input
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Nombre del nuevo proyecto"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+              />
+              <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+                Crear Proyecto
+              </button>
+            </form>
+            
+            <div className="space-y-3">
+              {projects.map(project => (
+                <div 
+                  key={project.id}
+                  onClick={() => setSelectedProjectId(project.id)}
+                  className={`flex justify-between items-center p-4 rounded-lg cursor-pointer ${selectedProjectId === project.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+                >
+                  <span className="font-medium">{project.name}</span>
+                  {project.id !== 'inbox' && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
+                      className="p-1 text-red-400 hover:text-red-300"
+                    >
+                      <TrashIcon />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            {selectedProject && (
+              <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+                <h2 className="text-3xl font-bold text-white mb-2">{selectedProject.name}</h2>
+                <p className="text-gray-400 mb-6">{selectedProject.description || 'Tareas de este proyecto.'}</p>
+                
+                <h3 className="text-xl font-semibold text-blue-400 mb-4">Tareas del Proyecto</h3>
+                <AddTaskForm 
+                  onAddTask={onAddTask} 
+                  projects={projects} 
+                  defaultProjectId={selectedProject.id}
+                />
+                <div className="space-y-3">
+                  {tasksForProject.length > 0 ? (
+                    tasksForProject.map(task => (
+                      <TaskItem 
+                        key={task.id} 
+                        task={task} 
+                        onToggleComplete={onUpdateTask} 
+                        onEdit={onEditTask} 
+                        onDelete={onDeleteTask}
+                        onStartTimer={onStartTimer}
+                        projects={projects}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">Este proyecto no tiene tareas.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // --- Vista Anotaciones ---
+    const NotesView = () => {
+      const [folders, setFolders] = useLocalStorage('notes_folders', [{ id: generateId(), name: 'General' }]);
+      const [notes, setNotes] = useLocalStorage('notes_notes', []);
+      const [selectedFolderId, setSelectedFolderId] = useState(folders[0]?.id || null);
+      const [selectedNoteId, setSelectedNoteId] = useState(null);
+      const [newFolderName, setNewFolderName] = useState('');
+
+      const handleAddFolder = (e) => {
+        e.preventDefault();
+        if (!newFolderName.trim()) return;
+        const newFolder = { id: generateId(), name: newFolderName };
+        setFolders([...folders, newFolder]);
+        setSelectedFolderId(newFolder.id);
+        setNewFolderName('');
+      };
+      
+      const handleDeleteFolder = (folderId) => {
+        if (folderId === folders[0]?.id) return; // No borrar 'General'
+        setFolders(folders.filter(f => f.id !== folderId));
+        setNotes(notes.filter(n => n.folderId !== folderId));
+        setSelectedFolderId(folders[0]?.id || null);
+      };
+
+      const handleAddNote = () => {
+        if (!selectedFolderId) return;
+        const newNote = {
+          id: generateId(),
+          folderId: selectedFolderId,
+          title: 'Nueva Nota',
+          content: '',
+          updatedAt: new Date().toISOString(),
+        };
+        setNotes([newNote, ...notes]);
+        setSelectedNoteId(newNote.id);
+      };
+      
+      const handleDeleteNote = (noteId) => {
+        setNotes(notes.filter(n => n.id !== noteId));
+        setSelectedNoteId(null);
+      };
+      
+      const handleUpdateNote = (updatedNote) => {
+        setNotes(notes.map(n => n.id === updatedNote.id ? { ...updatedNote, updatedAt: new Date().toISOString() } : n));
+      };
+      
+      const notesInFolder = useMemo(() => 
+        notes.filter(n => n.folderId === selectedFolderId).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
+      [notes, selectedFolderId]);
+      
+      const selectedNote = useMemo(() => 
+        notes.find(n => n.id === selectedNoteId),
+      [notes, selectedNoteId]);
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[75vh]">
+          {/* Columna de Carpetas */}
+          <div className="md:col-span-1 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
+            <h2 className="text-2xl font-bold text-white mb-4">Carpetas</h2>
+            <form onSubmit={handleAddFolder} className="mb-4">
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Nueva carpeta..."
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+              />
+            </form>
+            <div className="space-y-2 overflow-y-auto">
+              {folders.map(folder => (
+                <div
+                  key={folder.id}
+                  onClick={() => { setSelectedFolderId(folder.id); setSelectedNoteId(null); }}
+                  className={`flex justify-between items-center p-3 rounded-lg cursor-pointer ${selectedFolderId === folder.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+                >
+                  <span>{folder.name}</span>
+                  {folder.id !== folders[0]?.id && (
+                    <button onClick={(e) => {e.stopPropagation(); handleDeleteFolder(folder.id);}} className="text-red-400 hover:text-red-300">&times;</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Columna de Notas */}
+          <div className="md:col-span-1 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-white">Notas</h2>
+              <button onClick={handleAddNote} className="p-2 bg-blue-600 rounded-lg hover:bg-blue-700">
+                <PlusIcon />
+              </button>
+            </div>
+            <div className="space-y-2 overflow-y-auto">
+              {notesInFolder.map(note => (
+                <div
+                  key={note.id}
+                  onClick={() => setSelectedNoteId(note.id)}
+                  className={`p-3 rounded-lg cursor-pointer ${selectedNoteId === note.id ? 'bg-gray-900' : 'bg-gray-700 hover:bg-gray-600'}`}
+                >
+                  <h3 className="font-semibold text-white truncate">{note.title}</h3>
+                  <p className="text-sm text-gray-400 truncate">{note.content || 'Sin contenido...'}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Editor de Nota */}
+          <div className="md:col-span-2 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
+            {selectedNote ? (
+              <>
+                <input
+                  type="text"
+                  value={selectedNote.title}
+                  onChange={(e) => handleUpdateNote({ ...selectedNote, title: e.target.value })}
+                  className="w-full p-3 bg-gray-700 border-b border-gray-600 text-2xl font-bold text-white mb-4 outline-none"
+                />
+                <textarea
+                  value={selectedNote.content}
+                  onChange={(e) => handleUpdateNote({ ...selectedNote, content: e.target.value })}
+                  className="w-full h-full p-3 bg-gray-700 rounded-lg text-white outline-none resize-none"
+                  placeholder="Escribe tu nota aquí..."
+                ></textarea>
+                <button
+                  onClick={() => handleDeleteNote(selectedNote.id)}
+                  className="mt-4 p-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Eliminar Nota
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                Selecciona una nota para editar o crea una nueva.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // --- Vista Estudio (Pomodoro) ---
+    const StudyView = ({ onAddTask, projects }) => {
+      const [studyTasks, setStudyTasks] = useLocalStorage('study_tasks', []);
+      const [themes, setThemes] = useLocalStorage('study_themes', [{ id: 'general', name: 'General' }]);
+      const [newThemeName, setNewThemeName] = useState('');
+      const [filterTheme, setFilterTheme] = useState('all');
+      
+      const [pomodoroTime, setPomodoroTime] = useState(25 * 60); // 25 minutos
+      const [isPomodoroActive, setIsPomodoroActive] = useState(false);
+      const [pomodoroIntervalId, setPomodoroIntervalId] = useState(null);
+
+      const formatPomodoroTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      };
+
+      const startPomodoro = () => {
+        if (pomodoroTime <= 0) return;
+        setIsPomodoroActive(true);
+        const intervalId = setInterval(() => {
+          setPomodoroTime(t => {
+            if (t <= 1) {
+              clearInterval(intervalId);
+              setIsPomodoroActive(false);
+              // TODO: Añadir sonido de notificación
+              return 0;
+            }
+            return t - 1;
+          });
+        }, 1000);
+        setPomodoroIntervalId(intervalId);
+      };
+
+      const pausePomodoro = () => {
+        if (pomodoroIntervalId) {
+          clearInterval(pomodoroIntervalId);
+        }
+        setIsPomodoroActive(false);
+      };
+      
+      const resetPomodoro = () => {
+        pausePomodoro();
+        setPomodoroTime(25 * 60);
+      };
+      
+      const adjustPomodoro = (minutes) => {
+        if (isPomodoroActive) return;
+        setPomodoroTime(t => Math.max(60, t + (minutes * 60))); // Mínimo 1 minuto
+      };
+
+      // Manejo de Tareas de Estudio
+      const handleAddStudyTask = (taskData) => {
+        setStudyTasks(prev => [...prev, { ...taskData, id: generateId(), status: 'pending' }]);
+      };
+      
+      const handleToggleStudyTask = (taskId) => {
+        setStudyTasks(prev => prev.map(t => 
+          t.id === taskId ? { ...t, status: t.status === 'pending' ? 'completed' : 'pending' } : t
+        ));
+      };
+      
+      const handleDeleteStudyTask = (taskId) => {
+        setStudyTasks(prev => prev.filter(t => t.id !== taskId));
+      };
+      
+      const handleAddTheme = (e) => {
+        e.preventDefault();
+        if (!newThemeName.trim()) return;
+        setThemes(prev => [...prev, { id: generateId(), name: newThemeName }]);
+        setNewThemeName('');
+      };
+      
+      const filteredStudyTasks = useMemo(() =>
+        studyTasks.filter(t => filterTheme === 'all' || t.projectId === filterTheme),
+      [studyTasks, filterTheme]);
+
+      return (
+        <div>
+          {/* Sección Pomodoro */}
+          <div className="bg-gray-800 rounded-xl shadow-lg p-8 mb-8 flex flex-col items-center">
+            <h2 className="text-3xl font-bold text-white mb-6">Temporizador Pomodoro</h2>
+            <div className="text-8xl font-mono text-white mb-6">{formatPomodoroTime(pomodoroTime)}</div>
+            <div className="flex space-x-4 mb-6">
+              <button onClick={() => isPomodoroActive ? pausePomodoro() : startPomodoro()} className="p-4 px-8 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-lg">
+                {isPomodoroActive ? 'Pausar' : 'Iniciar'}
+              </button>
+              <button onClick={resetPomodoro} className="p-4 px-8 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 text-lg">
+                Reiniciar
+              </button>
+            </div>
+            <div className="flex space-x-2">
+              <button onClick={() => adjustPomodoro(-5)} disabled={isPomodoroActive} className="p-2 px-4 bg-gray-700 text-white rounded-lg disabled:opacity-50">-5 min</button>
+              <button onClick={() => adjustPomodoro(5)} disabled={isPomodoroActive} className="p-2 px-4 bg-gray-700 text-white rounded-lg disabled:opacity-50">+5 min</button>
+            </div>
+          </div>
+          
+          {/* Sección Tareas de Estudio */}
+          <div className="bg-gray-800 rounded-xl shadow-lg p-8">
+            <h2 className="text-3xl font-bold text-white mb-6">Tareas de Estudio</h2>
+            
+            {/* Formulario de Tarea (simplificado, usa AddTaskForm) */}
+            <AddTaskForm 
+              onAddTask={handleAddStudyTask} 
+              projects={themes} 
+              defaultProjectId="general" 
+            />
+
+            {/* Filtros y Temas */}
+            <div className="flex flex-wrap items-center justify-between mb-4">
+              <div className="flex space-x-2 overflow-x-auto py-2">
+                <button onClick={() => setFilterTheme('all')} className={`p-2 px-4 rounded-full text-sm ${filterTheme === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>Todos</button>
+                {themes.map(theme => (
+                  <button key={theme.id} onClick={() => setFilterTheme(theme.id)} className={`p-2 px-4 rounded-full text-sm ${filterTheme === theme.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
+                    {theme.name}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={handleAddTheme} className="flex ml-4">
+                <input 
+                  type="text" 
+                  value={newThemeName} 
+                  onChange={(e) => setNewThemeName(e.target.value)} 
+                  placeholder="Nuevo tema" 
+                  className="p-2 bg-gray-700 border border-gray-600 rounded-l-lg text-white"
+                />
+                <button type="submit" className="p-2 bg-blue-600 rounded-r-lg">+</button>
+              </form>
+            </div>
+            
+            {/* Lista de Tareas de Estudio */}
+            <div className="space-y-3">
+              {filteredStudyTasks.map(task => (
+                <div key={task.id} className={`flex items-center justify-between p-3 bg-gray-700 rounded-lg ${task.status === 'completed' ? 'opacity-50' : ''}`}>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={task.status === 'completed'}
+                      onChange={() => handleToggleStudyTask(task.id)}
+                      className="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded"
+                    />
+                    <div className="ml-4">
+                      <p className={`text-lg text-white ${task.status === 'completed' ? 'line-through' : ''}`}>{task.text}</p>
+                      <span className="text-sm text-blue-300">{themes.find(t => t.id === task.projectId)?.name || 'General'}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => handleDeleteStudyTask(task.id)} className="p-2 text-red-400 hover:text-red-300">
+                    <TrashIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+
+    // --- Componente Principal: App ---
+    function App() {
+      const [view, setView] = useState('dashboard');
+      const [tasks, setTasks] = useLocalStorage('tasks', []);
+      const [projects, setProjects] = useLocalStorage('projects', [{ id: 'inbox', name: 'Bandeja de entrada', description: 'Tareas sin proyecto específico' }]);
+      
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [editingTask, setEditingTask] = useState(null);
+      
+      const [focusTask, setFocusTask] = useState(null);
+      const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+
+      // --- CRUD de Tareas ---
+      const handleAddTask = (newTask) => {
+        setTasks(prevTasks => [...prevTasks, newTask]);
+      };
+
+      const handleUpdateTask = (updatedTask) => {
+        setTasks(prevTasks =>
+          prevTasks.map(task => (task.id === updatedTask.id ? updatedTask : task))
+        );
+      };
+      
+      const handleToggleComplete = (taskId) => {
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            task.id === taskId 
+              ? { ...task, status: task.status === 'pending' ? 'completed' : 'pending' }
+              : task
+          )
+        );
+      };
+
+      const handleDeleteTask = (taskId) => {
+        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      };
+      
+      // --- CRUD de Proyectos ---
+      const handleAddProject = (newProject) => {
+        setProjects(prev => [...prev, newProject]);
+      };
+      
+      const handleDeleteProject = (projectId) => {
+        if (projectId === 'inbox') return;
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        // Opcional: mover tareas a 'inbox'
+        setTasks(prev => prev.map(t => t.projectId === projectId ? { ...t, projectId: 'inbox' } : t));
+      };
+
+      // --- Modales ---
+      const handleEditTask = (task) => {
+        setEditingTask(task);
+        setIsModalOpen(true);
+      };
+      const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingTask(null);
+      };
+      
+      // --- Timer de 5 min ---
+      const handleStartTimer = (task) => {
+        setFocusTask(task);
+      };
+      
+      const handleFocusComplete = () => {
+        setIsFocusModalOpen(true);
+      };
+
+      const renderView = () => {
+        switch (view) {
+          case 'dashboard':
+            return <DashboardView 
+              tasks={tasks}
+              projects={projects}
+              onAddTask={handleAddTask}
+              onUpdateTask={handleToggleComplete}
+              onDeleteTask={handleDeleteTask}
+              onEditTask={handleEditTask}
+              onStartTimer={handleStartTimer}
+            />;
+          case 'agenda':
+            return <AgendaView 
+              tasks={tasks}
+              projects={projects}
+              onEditTask={handleEditTask}
+            />;
+          case 'projects':
+            return <ProjectsView 
+              projects={projects}
+              tasks={tasks}
+              onAddProject={handleAddProject}
+              onDeleteProject={handleDeleteProject}
+              onAddTask={handleAddTask}
+              onUpdateTask={handleToggleComplete}
+              onDeleteTask={handleDeleteTask}
+              onEditTask={handleEditTask}
+              onStartTimer={handleStartTimer}
+            />;
+          case 'notes':
+            return <NotesView />;
+          case 'study':
+            return <StudyView onAddTask={handleAddTask} projects={projects} />;
+          default:
+            return null;
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto">
+            
+            <header className="mb-8">
+              <h1 className="text-4xl font-bold text-white mb-6 text-center sm:text-left">Agenda Digital</h1>
+              <nav className="flex flex-wrap justify-center bg-gray-800 rounded-lg p-2 shadow-lg space-x-1 sm:space-x-2">
+                {[
+                  { id: 'dashboard', label: 'Inicio', icon: <DashboardIcon /> },
+                  { id: 'agenda', label: 'Agenda', icon: <CalendarIcon /> },
+                  { id: 'projects', label: 'Proyectos', icon: <ProjectIcon /> },
+                  { id: 'notes', label: 'Anotaciones', icon: <NotesIcon /> },
+                  { id: 'study', label: 'Estudio', icon: <StudyIcon /> },
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setView(item.id)}
+                    className={`flex-1 flex items-center justify-center p-3 font-medium rounded-md transition-colors ${
+                      view === item.id 
+                        ? 'bg-blue-600 text-white shadow-md' 
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="hidden sm:inline-block ml-2">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </header>
+
+            <main>
+              {renderView()}
+            </main>
+            
+            <Modal isOpen={isModalOpen} onClose={handleCloseModal}>
+              {editingTask && (
+                <EditTaskForm 
+                  task={editingTask}
+                  onUpdate={handleUpdateTask}
+                  onClose={handleCloseModal}
+                  projects={projects}
+                />
+              )}
+            </Modal>
+            
+            {focusTask && (
+              <FocusTimer 
+                task={focusTask}
+                onComplete={handleFocusComplete}
+                onClose={() => setFocusTask(null)}
+              />
+            )}
+            
+            <Modal isOpen={isFocusModalOpen} onClose={() => setIsFocusModalOpen(false)}>
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">¡Tiempo!</h2>
+                <p className="text-lg text-gray-300 mb-6">
+                  Se completaron los 5 minutos de enfoque para: <br />
+                  <span className="font-semibold text-white">{focusTask?.text}</span>
+                </p>
+                <button
+                  onClick={() => {
+                    setIsFocusModalOpen(false);
+                    setFocusTask(null);
+                  }}
+                  className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </Modal>
+            
           </div>
         </div>
       );
     }
 
-    // 5. Renderizar la aplicación en el 'root'
+    // --- Renderizar la App ---
     const container = document.getElementById('root');
     const root = ReactDOM.createRoot(container);
     root.render(<App />);
