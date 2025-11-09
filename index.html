@@ -3,48 +3,154 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agenda Digital</title>
-  
-  <!-- 1. Cargar React y ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  
-  <!-- 2. Cargar Babel (para compilar JSX en el navegador) -->
+  <title>Agenda Digital IA</title>
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- 3. Cargar Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Estilos globales básicos */
     body {
-      background-color: #111827; /* bg-gray-900 */
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+      font-family: 'Inter', sans-serif;
+      background-color: #111827; /* Fijo: bg-gray-900 */
+      color: #f3f4f6; /* Fijo: text-gray-100 */
     }
-    /* Estilos para que el calendario no se vea mal */
-    .rbc-calendar {
-      height: 600px;
+    /* Estilos para el scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1f2937; /* bg-gray-800 */
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #4b5563; /* bg-gray-600 */
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #6b7280; /* bg-gray-500 */
+    }
+    /* Clases para el toast (Notificaciones) */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 1000;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success { background-color: #10B981; color: white; }
+    .toast.error { background-color: #EF4444; color: white; }
+    .toast.info { background-color: #3B82F6; color: white; }
+
+    /* Estilos para la Agenda de Hoy (Timeline) */
+    .timeline-item {
+      position: relative;
+      padding-left: 2.5rem; /* 40px */
+      padding-bottom: 1.5rem; /* 24px */
+      border-left: 2px solid #374151; /* border-gray-700 */
+    }
+    .timeline-item:last-child {
+      border-left-color: transparent;
+      padding-bottom: 0;
+    }
+    .timeline-dot {
+      position: absolute;
+      left: -9px; /* Centra el círculo en la línea */
+      top: 1px;
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      border-width: 4px;
+      border-color: #1f2937; /* bg-gray-800 */
+      background-color: #3b82f6; /* bg-blue-500 */
     }
   </style>
 </head>
 <body>
-
-  <!-- Este es el 'root' donde React montará la aplicación -->
   <div id="root"></div>
 
-  <!-- Todo nuestro código React va aquí adentro -->
   <script type="text/babel">
-    // --- Hooks de React ---
-    // Ya no usamos 'import', los tomamos del objeto global 'React'
-    const { useState, useEffect, useMemo, useCallback } = React;
+    const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
+
+    // --- Clave de API de Gemini ---
+    const GEMINI_API_KEY = ""; 
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+
+    // --- Funciones de API de IA ---
+
+    // Función de backoff exponencial para reintentos de API
+    const exponentialBackoff = (fn, retries = 5, delay = 1000) => {
+      return new Promise((resolve, reject) => {
+        const attempt = async (tryCount) => {
+          try {
+            const result = await fn();
+            resolve(result);
+          } catch (error) {
+            if (tryCount <= retries) {
+              // No registrar en consola los reintentos
+              setTimeout(() => attempt(tryCount + 1), delay * Math.pow(2, tryCount - 1));
+            } else {
+              reject(error);
+            }
+          }
+        };
+        attempt(1);
+      });
+    };
+
+    // Función genérica para llamar a Gemini con un esquema
+    const callGemini = async (prompt, responseSchema, systemPrompt) => {
+      const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
+        },
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+      };
+
+      const fetchFn = async () => {
+        const response = await fetch(GEMINI_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        
+        if (result.candidates && result.candidates.length > 0 &&
+            result.candidates[0].content && result.candidates[0].content.parts &&
+            result.candidates[0].content.parts.length > 0) {
+          const jsonText = result.candidates[0].content.parts[0].text;
+          return JSON.parse(jsonText);
+        } else {
+          throw new Error("Respuesta de IA inválida o vacía.");
+        }
+      };
+
+      return exponentialBackoff(fetchFn);
+    };
 
     // --- Función de ID simple ---
-    // Reemplazamos crypto.randomUUID por si acaso
     const generateId = () => {
       return '_' + Math.random().toString(36).substr(2, 9);
     };
 
-    // --- (NUEVO) Colores predefinidos para Proyectos ---
+    // --- Colores predefinidos para Proyectos ---
     const PROJECT_COLORS = [
       '#60a5fa', // blue-400
       '#f87171', // red-400
@@ -54,7 +160,7 @@
       '#fb923c', // orange-400
     ];
 
-    // --- (NUEVO) Utilidad para contraste de color ---
+    // --- Utilidad para contraste de color ---
     const getContrastColor = (hexcolor) => {
       if (!hexcolor) return '#FFFFFF'; // Default to white text
       hexcolor = hexcolor.replace('#', '');
@@ -71,6 +177,7 @@
 
 
     // --- Iconos (Componentes SVG) ---
+    // (Corregidos StudyIcon y RefreshIcon)
     const CalendarIcon = () => (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -86,16 +193,6 @@
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
       </svg>
     );
-    const NotesIcon = () => (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-    );
-    const StudyIcon = () => (
-       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.747 0-3.332.477-4.5 1.253" />
-      </svg>
-    );
     const PlusIcon = () => (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -108,7 +205,7 @@
     );
     const EditIcon = () => (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
       </svg>
     );
     const ClockIcon = () => (
@@ -116,21 +213,63 @@
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     );
+    const FolderIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+    );
+    const NoteIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    );
     const TimerIcon = () => (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     );
-
-    // --- Componente de Carga (Nuevo) ---
-    const LoadingSpinner = () => (
-      <div className="flex justify-center items-center h-full">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
+    const PlayIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    const PauseIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    const RefreshIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2.082a9.002 9.002 0 00-16.134 0M19.644 12A9 9 0 113.866 12.001" />
+      </svg>
+    );
+    // (Corregido)
+    const StudyIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v11.494M12 6.253c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v11.494m-5.468-9.088c-1.332.61-2.28 1.9-2.28 3.333 0 1.933 1.567 3.5 3.5 3.5s3.5-1.567 3.5-3.5c0-1.433-.948-2.722-2.28-3.333M21.75 12c0 1.933-1.567 3.5-3.5 3.5s-3.5-1.567-3.5-3.5c0-1.433.948-2.722 2.28-3.333M3 12c0 1.933 1.567 3.5 3.5 3.5s3.5-1.567 3.5-3.5c0-1.433-.948-2.722-2.28-3.333" />
+      </svg>
+    );
+    const SparklesIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m1-9l2-2 2 2m-2-2v4m2 10l2 2 2-2m-2 2v-4m-6 4l-2 2-2-2m2 2v-4m6-4l2-2 2 2m-2-2v4" />
+      </svg>
+    );
+    const TimelineIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      </svg>
+    );
+    const ChartBarIcon = () => (
+       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z" />
+      </svg>
     );
 
+
     // --- Hook Personalizado: useLocalStorage ---
-    function useLocalStorage(key, initialValue) {
+    const useLocalStorage = (key, initialValue) => {
       const [storedValue, setStoredValue] = useState(() => {
         try {
           const item = window.localStorage.getItem(key);
@@ -150,30 +289,52 @@
           console.error(error);
         }
       };
-
       return [storedValue, setValue];
-    }
+    };
 
     // --- Funciones de Utilidad de Fecha ---
-    const getTodayISO = () => new Date().toISOString().split('T')[0];
-    const getTomorrowISO = () => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
+    const getTodayISO = () => {
+      const today = new Date();
+      return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     };
-    const getNext7DaysISO = () => {
-      const dates = [];
-      for (let i = 1; i <= 7; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() + i);
-        dates.push(date.toISOString().split('T')[0]);
-      }
-      return dates;
-    };
+
     const formatDate = (isoDate) => {
       if (!isoDate) return '';
-      const date = new Date(isoDate + 'T00:00:00'); // Asumir zona horaria local
-      return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+      try {
+        const date = new Date(isoDate + 'T00:00:00'); // Asumir zona horaria local
+        return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+      } catch(e) {
+        return "Fecha inválida";
+      }
+    };
+    
+    // --- Contexto y Hook para Notificaciones (Toast) ---
+    const ToastContext = createContext();
+
+    const ToastProvider = ({ children }) => {
+      const [toast, setToast] = useState(null);
+
+      const showToast = (message, type = 'info') => {
+        setToast({ message, type });
+        setTimeout(() => {
+          setToast(null);
+        }, 3000);
+      };
+
+      return (
+        <ToastContext.Provider value={showToast}>
+          {children}
+          {toast && (
+            <div className={`toast show ${toast.type}`}>
+              {toast.message}
+            </div>
+          )}
+        </ToastContext.Provider>
+      );
+    };
+
+    const useToast = () => {
+      return useContext(ToastContext);
     };
 
     // --- Componente Modal ---
@@ -181,16 +342,14 @@
       if (!isOpen) return null;
 
       return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg relative">
-            <button
-              onClick={onClose}
-              className="absolute top-3 right-3 text-gray-400 hover:text-white"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {children}
           </div>
         </div>
@@ -199,19 +358,21 @@
 
     // --- Componente TaskItem ---
     const TaskItem = ({ task, onToggleComplete, onEdit, onDelete, onStartTimer, projects }) => {
-      const project = projects.find(p => p.id === task.projectId);
+      const project = useMemo(() => projects.find(p => p.id === task.projectId), [projects, task.projectId]);
       const isCompleted = task.status === 'completed';
 
       return (
-        <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-800 rounded-lg shadow mb-3 transition-all duration-200 ${isCompleted ? 'opacity-50' : ''}`}>
-          <div className="flex items-center w-full overflow-hidden">
+        <div 
+          className={`relative flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-800 rounded-lg shadow mb-3 transition-all duration-200 ${isCompleted ? 'opacity-50' : ''} border-l-4 ${isCompleted ? 'border-green-600' : 'border-gray-700'}`}
+        >
+          <div className="flex items-start w-full">
             <input
               type="checkbox"
               checked={isCompleted}
               onChange={() => onToggleComplete(task.id)}
-              className="form-checkbox h-5 w-5 text-blue-500 bg-gray-900 border-gray-700 rounded focus:ring-blue-600 flex-shrink-0"
+              className="form-checkbox h-5 w-5 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-600 mt-1 flex-shrink-0"
             />
-            <div className="ml-4 flex-grow overflow-hidden">
+            <div className="ml-4 flex-grow min-w-0">
               <p className={`text-lg font-medium text-white ${isCompleted ? 'line-through' : ''}`}>
                 {task.text}
               </p>
@@ -243,7 +404,7 @@
           <div className="w-full sm:w-auto flex-shrink-0 flex space-x-2 justify-end mt-3 sm:mt-0 sm:ml-4">
             <button
               onClick={() => onStartTimer(task)}
-              className="p-2 text-green-400 hover:text-green-300 hover:bg-gray-700 rounded-full transition-colors"
+              className="p-2 text-green-400 hover:text-green-300 bg-green-900 bg-opacity-30 hover:bg-opacity-50 rounded-full transition-colors"
               title="Iniciar 5 min"
             >
               <TimerIcon />
@@ -251,14 +412,14 @@
             <button
               onClick={() => onEdit(task)}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
-              title="Editar"
+              aria-label="Editar tarea"
             >
               <EditIcon />
             </button>
             <button
               onClick={() => onDelete(task.id)}
               className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-full transition-colors"
-              title="Eliminar"
+              aria-label="Eliminar tarea"
             >
               <TrashIcon />
             </button>
@@ -267,95 +428,100 @@
       );
     };
 
-    // --- Componente AddTaskForm ---
-    const AddTaskForm = ({ onAddTask, projects, defaultDate = '', defaultProjectId = null }) => {
-      const [text, setText] = useState('');
-      const [dueDate, setDueDate] = useState(defaultDate);
-      const [dueTime, setDueTime] = useState('');
-      const [projectId, setProjectId] = useState(defaultProjectId || 'inbox');
+    // --- Componente AddTaskForm (Híbrido IA) ---
+    const AddTaskForm = ({ onAiAddTask, projects, defaultProjectId = null }) => {
+      const [prompt, setPrompt] = useState('');
+      const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || 'inbox');
+      const [isLoading, setIsLoading] = useState(false);
+      
+      useEffect(() => {
+        // Sincroniza el proyecto si el default cambia (al navegar en Proyectos)
+        setSelectedProjectId(defaultProjectId || 'inbox');
+      }, [defaultProjectId]);
 
-      const handleSubmit = (e) => {
+      const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!text.trim()) return;
-        const newTask = {
-          id: generateId(),
-          text,
-          date: dueDate || null,
-          time: dueTime || null,
-          projectId: projectId || 'inbox',
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        };
-        onAddTask(newTask);
-        setText('');
-        setDueDate(defaultDate || '');
-        setDueTime('');
-        if (!defaultProjectId) {
-          setProjectId('inbox');
+        if (!prompt.trim()) return;
+        
+        setIsLoading(true);
+        try {
+          // Pasa el proyecto seleccionado manualmente a la función de IA
+          await onAiAddTask(prompt, selectedProjectId);
+          setPrompt('');
+          // Resetea al proyecto por defecto (Bandeja de entrada) solo si no estamos en un proyecto específico
+          if (defaultProjectId === null) {
+            setSelectedProjectId('inbox');
+          }
+        } catch (error) {
+          // El error ya se maneja en onAiAddTask (con toast)
+        } finally {
+          setIsLoading(false);
         }
       };
 
       return (
-        <form onSubmit={handleSubmit} className="p-6 bg-gray-800 rounded-xl shadow-lg mb-8">
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="¿Qué tienes que hacer?"
-            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+        <form onSubmit={handleSubmit} className="p-4 bg-gray-800 rounded-xl shadow-lg mb-6">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Escribe tu tarea... (Ej: Reunión con el equipo mañana a las 10am)"
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none h-20 resize-none"
+            disabled={isLoading}
           />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
-            />
-            <input
-              type="time"
-              value={dueTime}
-              onChange={(e) => setDueTime(e.target.value)}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
             <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
               className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+              disabled={isLoading}
             >
-              <option value="inbox">Bandeja de entrada</option>
-              {projects.filter(p => p.id !== 'inbox').map(project => (
+              {projects.map(project => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
+            <button
+              type="submit"
+              className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center disabled:opacity-50"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Analizando...
+                </>
+              ) : (
+                <>
+                  <SparklesIcon /> <span className="ml-2">Añadir Tarea (IA)</span>
+                </>
+              )}
+            </button>
           </div>
-          <button
-            type="submit"
-            className="w-full mt-4 p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-          >
-            <PlusIcon /> <span className="ml-2">Añadir Tarea</span>
-          </button>
         </form>
       );
     };
 
+
     // --- Componente EditTaskForm ---
-    const EditTaskForm = ({ task, onUpdate, onClose, projects }) => {
+    const EditTaskForm = ({ task, onUpdate, onClose, projects, onDelete }) => {
       const [text, setText] = useState(task.text);
-      const [dueDate, setDueDate] = useState(task.date || '');
-      const [dueTime, setDueTime] = useState(task.time || '');
-      const [projectId, setProjectId] = useState(task.projectId || 'inbox');
+      const [dueDate, setDueDate] = useState(task.date);
+      const [dueTime, setDueTime] = useState(task.time);
+      const [projectId, setProjectId] = useState(task.projectId);
+      const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
       const handleSubmit = (e) => {
         e.preventDefault();
-        onUpdate({
-          ...task,
-          text,
-          date: dueDate || null,
-          time: dueTime || null,
-          projectId,
-        });
+        onUpdate(task.id, { text, date: dueDate, time: dueTime, projectId });
         onClose();
       };
+      
+      const handleDelete = () => {
+        onDelete(task.id);
+        onClose();
+      }
 
       return (
         <form onSubmit={handleSubmit}>
@@ -366,7 +532,7 @@
             onChange={(e) => setText(e.target.value)}
             className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-4"
           />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <input
               type="date"
               value={dueDate}
@@ -379,111 +545,199 @@
               onChange={(e) => setDueTime(e.target.value)}
               className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
             />
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
-            >
-              <option value="inbox">Bandeja de entrada</option>
-              {projects.filter(p => p.id !== 'inbox').map(project => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
           </div>
-          <div className="flex justify-end mt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-3 px-6 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 mr-2"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
-            >
-              Guardar
-            </button>
-          </div>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-4"
+          >
+            {projects.map(project => (
+              <option key={project.id} value={project.id}>{project.name}</option>
+            ))}
+          </select>
+          
+          {showConfirmDelete ? (
+             <div className="flex justify-between items-center mt-6 bg-gray-700 p-4 rounded-lg">
+               <p className="text-white">¿Seguro?</p>
+               <div>
+                 <button
+                   type="button"
+                   onClick={() => setShowConfirmDelete(false)}
+                   className="p-2 px-4 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 mr-2"
+                 >
+                   Cancelar
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleDelete}
+                   className="p-2 px-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
+                 >
+                   Sí, Eliminar
+                 </button>
+               </div>
+             </div>
+          ) : (
+            <div className="flex justify-between mt-6">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(true)}
+                className="p-3 px-6 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
+              >
+                Eliminar
+              </button>
+              <div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-3 px-6 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 mr-2"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       );
     };
-
-    // --- Componente FocusTimer ---
-    const FocusTimer = ({ task, onComplete, onClose }) => {
-      const [timeLeft, setTimeLeft] = useState(5 * 60); // 5 minutos
-
-      useEffect(() => {
-        if (timeLeft <= 0) {
-          onComplete();
-          return;
-        }
-        const timerId = setInterval(() => {
-          setTimeLeft(t => t - 1);
-        }, 1000);
-        return () => clearInterval(timerId);
-      }, [timeLeft, onComplete]);
-
-      const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-      };
+    
+    // --- (NUEVO) Componente TodayTimelineModal (Agenda Hoy) ---
+    const TodayTimelineModal = ({ tasks, onClose, projects }) => {
+      const tasksWithTime = useMemo(() => 
+        tasks
+          .filter(t => t.time && t.status !== 'completed')
+          .sort((a, b) => a.time.localeCompare(b.time)),
+        [tasks]
+      );
+      
+      const tasksWithoutTime = useMemo(() =>
+        tasks.filter(t => !t.time && t.status !== 'completed'),
+        [tasks]
+      );
 
       return (
-        <div className="fixed bottom-4 right-4 bg-gray-700 text-white p-4 rounded-lg shadow-xl z-50">
-          <button onClick={onClose} className="absolute top-1 right-2 text-gray-400 hover:text-white">&times;</button>
-          <div className="text-sm text-gray-300">Enfocado en:</div>
-          <div className="text-lg font-bold truncate max-w-xs">{task.text}</div>
-          <div className="text-3xl font-mono text-center my-2">{formatTime(timeLeft)}</div>
-        </div>
+        <Modal isOpen={true} onClose={onClose}>
+          <h2 className="text-2xl font-bold text-white mb-6">Agenda de Hoy</h2>
+          
+          <h3 className="text-lg font-semibold text-blue-300 mb-3">Cronograma</h3>
+          {tasksWithTime.length > 0 ? (
+            <div className="relative pl-4 pt-2">
+              {tasksWithTime.map(task => {
+                const project = projects.find(p => p.id === task.projectId);
+                return (
+                  <div key={task.id} className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-semibold text-blue-400">{task.time}</span>
+                      {project && (
+                        <span 
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                          style={{
+                            backgroundColor: project.color || '#4b5563',
+                            color: getContrastColor(project.color || '#4b5563')
+                          }}
+                        >
+                          {project.name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white mt-1">{task.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-gray-400 mb-6">No hay tareas con hora para hoy.</p>
+          )}
+
+          <h3 className="text-lg font-semibold text-blue-300 mb-3 mt-8">Tareas de todo el día</h3>
+          {tasksWithoutTime.length > 0 ? (
+            <div className="space-y-2">
+              {tasksWithoutTime.map(task => (
+                <div key={task.id} className="bg-gray-700 p-3 rounded-lg flex items-center">
+                  <input type="checkbox" className="form-checkbox h-5 w-5 text-blue-500 bg-gray-600 border-gray-500 rounded" disabled />
+                  <span className="ml-3 text-white">{task.text}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400">No hay tareas sin hora para hoy.</p>
+          )}
+          
+          <button
+            onClick={onClose}
+            className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors mt-8"
+          >
+            Cerrar
+          </button>
+        </Modal>
       );
     };
 
     // --- Vista Dashboard (Inicio) ---
-    const DashboardView = ({ tasks, projects, onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
-      const [isFormVisible, setIsFormVisible] = useState(false);
+    const DashboardView = ({ tasks, projects, onAiAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
       const today = getTodayISO();
-      const next7Days = getNext7DaysISO();
+      const [showTimeline, setShowTimeline] = useState(false);
 
       const todayTasks = useMemo(() =>
         tasks
-          .filter(task => task.date === today && task.status === 'pending')
-          .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+          .filter(task => task.date === today && task.status !== 'completed')
+          .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59')),
         [tasks, today]
       );
+      
+      const sevenDayTasks = useMemo(() => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
 
-      const weekTasks = useMemo(() =>
-        tasks
-          .filter(task => next7Days.includes(task.date) && task.status === 'pending')
-          .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '')),
-        [tasks, next7Days]
-      );
+        const sevenDaysFromNow = new Date(tomorrow);
+        sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 6);
+        sevenDaysFromNow.setHours(23, 59, 59, 999);
+
+        return tasks
+          .filter(task => {
+            if (!task.date || task.status === 'completed') return false;
+            try {
+              const taskDate = new Date(task.date + 'T00:00:00');
+              return taskDate >= tomorrow && taskDate <= sevenDaysFromNow;
+            } catch(e) {
+              return false;
+            }
+          })
+          .sort((a, b) => (a.date + (a.time || '00:00')).localeCompare(b.date + (b.time || '00:00')));
+      }, [tasks]);
       
       const completedTodayTasks = useMemo(() =>
         tasks
-          .filter(task => task.date === today && task.status === 'completed'),
-        [tasks, today]
-      );
+          .filter(task => task.status === 'completed' && (task.date === today || task.completedDate === today))
+      , [tasks, today]);
 
       return (
         <div>
-          <div className="mb-6">
-            <button
-              onClick={() => setIsFormVisible(v => !v)}
-              className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-            >
-              <PlusIcon /> <span className="ml-2">{isFormVisible ? "Ocultar Formulario" : "Añadir Nueva Tarea"}</span>
-            </button>
-            {isFormVisible && (
-              <div className="mt-4">
-                <AddTaskForm onAddTask={onAddTask} projects={projects} defaultDate={today} />
-              </div>
-            )}
-          </div>
+          <AddTaskForm 
+            onAiAddTask={onAiAddTask} 
+            projects={projects} 
+            defaultProjectId={null}
+          />
           
           <section className="mb-8">
-            <h3 className="text-2xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Tareas para Hoy ({formatDate(today)})</h3>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+              <h3 className="text-xl font-semibold text-blue-400">Tareas para Hoy ({formatDate(today)})</h3>
+              <button
+                onClick={() => setShowTimeline(true)}
+                className="flex items-center text-sm px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg"
+              >
+                <TimelineIcon />
+                <span className="ml-1.5">Ver Agenda de Hoy</span>
+              </button>
+            </div>
+            
             {todayTasks.length > 0 ? (
               todayTasks.map(task => (
                 <TaskItem 
@@ -502,9 +756,9 @@
           </section>
 
           <section className="mb-8">
-            <h3 className="text-2xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Próximos 7 Días</h3>
-            {weekTasks.length > 0 ? (
-              weekTasks.map(task => (
+            <h3 className="text-xl font-semibold text-blue-400 mb-4 border-b border-gray-700 pb-2">Próximos 7 Días</h3>
+            {sevenDayTasks.length > 0 ? (
+              sevenDayTasks.map(task => (
                 <TaskItem 
                   key={task.id} 
                   task={task} 
@@ -520,10 +774,10 @@
             )}
           </section>
 
-          <section>
-            <h3 className="text-2xl font-semibold text-gray-500 mb-4 border-b border-gray-700 pb-2">Completadas Hoy</h3>
-            {completedTodayTasks.length > 0 ? (
-              completedTodayTasks.map(task => (
+          {completedTodayTasks.length > 0 && (
+            <section>
+              <h3 className="text-lg font-semibold text-green-400 mb-4 border-b border-gray-700 pb-2">Completadas Hoy</h3>
+              {completedTodayTasks.map(task => (
                 <TaskItem 
                   key={task.id} 
                   task={task} 
@@ -533,11 +787,17 @@
                   onStartTimer={onStartTimer}
                   projects={projects}
                 />
-              ))
-            ) : (
-              <p className="text-gray-500 p-3 bg-gray-800 rounded-lg">Aún no has completado tareas hoy.</p>
-            )}
-          </section>
+              ))}
+            </section>
+          )}
+          
+          {showTimeline && (
+            <TodayTimelineModal 
+              tasks={todayTasks} 
+              onClose={() => setShowTimeline(false)}
+              projects={projects}
+            />
+          )}
         </div>
       );
     };
@@ -553,18 +813,27 @@
         const firstDayOfMonth = new Date(year, month, 1);
         const lastDayOfMonth = new Date(year, month + 1, 0);
         const daysInMonth = lastDayOfMonth.getDate();
-        let startDayOfWeek = firstDayOfMonth.getDay();
-        if (startDayOfWeek === 0) startDayOfWeek = 6;
-        else startDayOfWeek -= 1; 
+        let startDayOfWeek = firstDayOfMonth.getDay(); // 0 (Dom) - 6 (Sáb)
+        
+        // Ajustar para que la semana empiece en Lunes (1)
+        if (startDayOfWeek === 0) startDayOfWeek = 6; // Domingo es 6
+        else startDayOfWeek -= 1; // Lunes es 0, Martes 1, ...
+        
         const days = [];
         const prevLastDay = new Date(year, month, 0).getDate();
+        
+        // Días del mes anterior
         for (let i = startDayOfWeek; i > 0; i--) {
           days.push({ date: new Date(year, month - 1, prevLastDay - i + 1), isCurrentMonth: false });
         }
+        
+        // Días del mes actual
         for (let i = 1; i <= daysInMonth; i++) {
           days.push({ date: new Date(year, month, i), isCurrentMonth: true });
         }
-        const totalCells = days.length <= 35 ? 35 : 42;
+        
+        // Días del mes siguiente
+        const totalCells = 42; // 6 filas de 7 días
         const nextDays = totalCells - days.length;
         for (let i = 1; i <= nextDays; i++) {
           days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
@@ -576,23 +845,25 @@
       const todayISO = getTodayISO();
 
       return (
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="bg-gray-800 rounded-xl shadow-lg p-4 sm:p-6">
           <div className="flex justify-between items-center mb-6">
             <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&lt;</button>
-            <h2 className="text-2xl font-bold text-white capitalize">
+            <h2 className="text-xl sm:text-2xl font-bold text-white capitalize">
               {currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
             </h2>
             <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600">&gt;</button>
           </div>
           <div className="grid grid-cols-7 gap-1 text-center font-semibold text-blue-300 mb-2">
-            {daysOfWeek.map(day => <div key={day}>{day}</div>)}
+            {daysOfWeek.map(day => <div key={day} className="text-xs sm:text-sm">{day}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-1">
             {calendarDays.map(({ date, isCurrentMonth }, index) => {
-              const dateISO = date.toISOString().split('T')[0];
+              const dateISO = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+              
               const tasksForDay = tasks
                 .filter(task => task.date === dateISO)
-                .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+              
               const isToday = dateISO === todayISO;
 
               return (
@@ -600,10 +871,10 @@
                   key={index}
                   className={`h-24 sm:h-32 rounded-lg p-2 ${isCurrentMonth ? 'bg-gray-700' : 'bg-gray-900 opacity-50'} ${isToday ? 'border-2 border-blue-500' : ''} overflow-y-auto`}
                 >
-                  <span className={`font-semibold ${isToday ? 'text-blue-400' : 'text-white'}`}>
+                  <span className={`font-semibold text-xs sm:text-sm ${isToday ? 'text-blue-400' : 'text-white'}`}>
                     {date.getDate()}
                   </span>
-                  <div className="mt-1">
+                  <div className="mt-1 space-y-1">
                     {tasksForDay.map(task => {
                       const project = projects.find(p => p.id === task.projectId);
                       return (
@@ -632,12 +903,13 @@
     // --- Vista Proyectos ---
     const ProjectsView = ({ 
       projects, tasks, onAddProject, onDeleteProject, 
-      onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer,
-      onOpenPlanner // Prop Nueva
+      onAiAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer,
+      onShowPlanner
     }) => {
       const [selectedProjectId, setSelectedProjectId] = useState('inbox');
       const [newProjectName, setNewProjectName] = useState('');
-      const [newProjectColor, setNewProjectColor] = useState(PROJECT_COLORS[0]); // (NUEVO) Estado para color
+      const [newProjectDesc, setNewProjectDesc] = useState('');
+      const [newProjectColor, setNewProjectColor] = useState(PROJECT_COLORS[0]);
 
       const handleAddProject = (e) => {
         e.preventDefault();
@@ -645,15 +917,16 @@
         onAddProject({ 
           id: generateId(), 
           name: newProjectName, 
-          description: '',
-          color: newProjectColor // Añadir color al proyecto
+          description: newProjectDesc,
+          color: newProjectColor
         });
         setNewProjectName('');
-        setNewProjectColor(PROJECT_COLORS[0]); // Resetear color
+        setNewProjectDesc('');
+        setNewProjectColor(PROJECT_COLORS[0]);
       };
 
       const selectedProject = useMemo(() => 
-        projects.find(p => p.id === selectedProjectId),
+        projects.find(p => p.id === selectedProjectId) || { id: 'inbox', name: 'Bandeja de entrada', description: 'Tareas sin proyecto' },
         [projects, selectedProjectId]
       );
 
@@ -664,20 +937,17 @@
 
       return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6">
+          {/* Columna de Proyectos */}
+          <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6 h-fit self-start">
             <h2 className="text-2xl font-bold text-white mb-4">Proyectos</h2>
-
-            {/* Botón para el Planificador IA (NUEVO) */}
+            
             <button
-              onClick={onOpenPlanner}
-              className="w-full p-3 mb-6 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
+              onClick={onShowPlanner}
+              className="w-full p-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 mb-6 flex items-center justify-center"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l.707.707M6.343 17.657l-.707.707m12.728 0l.707-.707" />
-              </svg>
-              Planificador de Estudio IA
+              <SparklesIcon /> <span className="ml-2">Planificador de Estudio IA</span>
             </button>
-
+            
             <form onSubmit={handleAddProject} className="mb-6">
               <input
                 type="text"
@@ -686,8 +956,13 @@
                 placeholder="Nombre del nuevo proyecto"
                 className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
               />
-
-              {/* (NUEVO) Selector de Color */}
+              <textarea
+                value={newProjectDesc}
+                onChange={(e) => setNewProjectDesc(e.target.value)}
+                placeholder="Descripción (opcional)"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-3 h-20 resize-none"
+              />
+              {/* Selector de Color */}
               <div className="flex justify-between my-3 px-1">
                 {PROJECT_COLORS.map(color => (
                   <button
@@ -713,18 +988,17 @@
                   onClick={() => setSelectedProjectId(project.id)}
                   className={`flex justify-between items-center p-4 rounded-lg cursor-pointer ${selectedProjectId === project.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
                 >
-                  <div className="flex items-center">
-                    {/* (NUEVO) Círculo de color */}
+                  <div className="flex items-center min-w-0">
                     <span 
                       className="w-4 h-4 rounded-full mr-3 flex-shrink-0 border border-gray-900"
                       style={{ backgroundColor: project.color || '#4b5563' }}
                     ></span>
-                    <span className="font-medium">{project.name}</span>
+                    <span className="font-medium truncate">{project.name}</span>
                   </div>
                   {project.id !== 'inbox' && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
-                      className="p-1 text-red-400 hover:text-red-300"
+                      className="p-1 text-red-400 hover:text-red-300 flex-shrink-0"
                     >
                       <TrashIcon />
                     </button>
@@ -734,174 +1008,165 @@
             </div>
           </div>
 
+          {/* Columna de Tareas del Proyecto */}
           <div className="lg:col-span-2">
-            {selectedProject && (
-              <div className="bg-gray-800 rounded-xl shadow-lg p-6">
-                <h2 className="text-3xl font-bold text-white mb-2">{selectedProject.name}</h2>
-                <p className="text-gray-400 mb-6">{selectedProject.description || 'Tareas de este proyecto.'}</p>
-                
-                <h3 className="text-xl font-semibold text-blue-400 mb-4">Tareas del Proyecto</h3>
-                <AddTaskForm 
-                  onAddTask={onAddTask} 
-                  projects={projects} 
-                  defaultProjectId={selectedProject.id}
-                />
-                <div className="space-y-3">
-                  {tasksForProject.length > 0 ? (
-                    tasksForProject.map(task => (
-                      <TaskItem 
-                        key={task.id} 
-                        task={task} 
-                        onToggleComplete={onUpdateTask} 
-                        onEdit={onEditTask} 
-                        onDelete={onDeleteTask}
-                        onStartTimer={onStartTimer}
-                        projects={projects}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">Este proyecto no tiene tareas.</p>
-                  )}
-                </div>
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-3xl font-bold text-white mb-2">{selectedProject.name}</h2>
+              {selectedProject.description && (
+                <p className="text-gray-300 mb-6">{selectedProject.description}</p>
+              )}
+              
+              <h3 className="text-xl font-semibold text-blue-400 mb-4">Añadir Tarea al Proyecto</h3>
+              <AddTaskForm 
+                onAiAddTask={onAiAddTask} 
+                projects={projects} 
+                defaultProjectId={selectedProject.id}
+              />
+              
+              <div className="space-y-3 mt-6">
+                {tasksForProject.length > 0 ? (
+                  tasksForProject.map(task => (
+                    <TaskItem 
+                      key={task.id} 
+                      task={task} 
+                      onToggleComplete={onUpdateTask} 
+                      onEdit={onEditTask} 
+                      onDelete={onDeleteTask}
+                      onStartTimer={onStartTimer}
+                      projects={projects}
+                    />
+                  ))
+                ) : (
+                  <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">Este proyecto no tiene tareas.</p>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       );
     };
 
-    // --- Vista Anotaciones ---
+    // --- Vista Anotaciones (Diario) ---
     const NotesView = () => {
-      const [folders, setFolders] = useLocalStorage('notes_folders', [{ id: generateId(), name: 'General' }]);
-      const [notes, setNotes] = useLocalStorage('notes_notes', []);
-      const [selectedFolderId, setSelectedFolderId] = useState(folders[0]?.id || null);
+      const [folders, setFolders] = useLocalStorage('notes_folders', [{ id: 'general', name: 'General' }]);
+      const [notes, setNotes] = useLocalStorage('notes', []);
+      const [selectedFolderId, setSelectedFolderId] = useState('general');
       const [selectedNoteId, setSelectedNoteId] = useState(null);
       const [newFolderName, setNewFolderName] = useState('');
+      
+      const notesInFolder = useMemo(() => 
+        notes.filter(n => n.folderId === selectedFolderId).sort((a, b) => b.updatedAt - a.updatedAt)
+      , [notes, selectedFolderId]);
+      
+      const selectedNote = useMemo(() => 
+        notes.find(n => n.id === selectedNoteId)
+      , [notes, selectedNoteId]);
 
-      const handleAddFolder = (e) => {
-        e.preventDefault();
+      const handleAddFolder = () => {
         if (!newFolderName.trim()) return;
-        const newFolder = { id: generateId(), name: newFolderName };
-        setFolders([...folders, newFolder]);
-        setSelectedFolderId(newFolder.id);
+        setFolders(prev => [...prev, { id: generateId(), name: newFolderName }]);
         setNewFolderName('');
       };
       
-      const handleDeleteFolder = (folderId) => {
-        if (folderId === folders[0]?.id) return; // No borrar 'General'
-        setFolders(folders.filter(f => f.id !== folderId));
-        setNotes(notes.filter(n => n.folderId !== folderId));
-        setSelectedFolderId(folders[0]?.id || null);
-      };
-
       const handleAddNote = () => {
-        if (!selectedFolderId) return;
         const newNote = {
           id: generateId(),
           folderId: selectedFolderId,
           title: 'Nueva Nota',
           content: '',
-          updatedAt: new Date().toISOString(),
+          updatedAt: Date.now()
         };
-        setNotes([newNote, ...notes]);
+        setNotes(prev => [newNote, ...prev]);
         setSelectedNoteId(newNote.id);
       };
       
-      const handleDeleteNote = (noteId) => {
-        setNotes(notes.filter(n => n.id !== noteId));
-        setSelectedNoteId(null);
+      const handleUpdateNote = (field, value) => {
+        setNotes(prev => prev.map(n => 
+          n.id === selectedNoteId 
+            ? { ...n, [field]: value, updatedAt: Date.now() } 
+            : n
+        ));
       };
       
-      const handleUpdateNote = (updatedNote) => {
-        setNotes(notes.map(n => n.id === updatedNote.id ? { ...updatedNote, updatedAt: new Date().toISOString() } : n));
+      const handleDeleteNote = (id) => {
+        setNotes(prev => prev.filter(n => n.id !== id));
+        if (selectedNoteId === id) {
+          setSelectedNoteId(null);
+        }
       };
-      
-      const notesInFolder = useMemo(() => 
-        notes.filter(n => n.folderId === selectedFolderId).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
-      [notes, selectedFolderId]);
-      
-      const selectedNote = useMemo(() => 
-        notes.find(n => n.id === selectedNoteId),
-      [notes, selectedNoteId]);
 
       return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:h-[75vh]">
-          {/* Columna de Carpetas */}
-          <div className="md:col-span-1 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
-            <h2 className="text-2xl font-bold text-white mb-4">Carpetas</h2>
-            <form onSubmit={handleAddFolder} className="mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[75vh]">
+          {/* Carpetas */}
+          <div className="md:col-span-1 bg-gray-800 rounded-xl p-4 overflow-y-auto h-full">
+            <h2 className="text-xl font-bold mb-4">Carpetas</h2>
+            <div className="mb-4">
               <input
                 type="text"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Nueva carpeta..."
-                className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                placeholder="Nueva carpeta"
+                className="w-full p-2 bg-gray-700 rounded"
               />
-            </form>
-            <div className="space-y-2 overflow-y-auto">
+              <button onClick={handleAddFolder} className="w-full p-2 bg-blue-600 mt-2 rounded">Crear</button>
+            </div>
+            <div className="space-y-2">
               {folders.map(folder => (
                 <div
                   key={folder.id}
                   onClick={() => { setSelectedFolderId(folder.id); setSelectedNoteId(null); }}
-                  className={`flex justify-between items-center p-3 rounded-lg cursor-pointer ${selectedFolderId === folder.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+                  className={`flex items-center p-3 rounded cursor-pointer ${selectedFolderId === folder.id ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
                 >
-                  <span>{folder.name}</span>
-                  {folder.id !== folders[0]?.id && (
-                    <button onClick={(e) => {e.stopPropagation(); handleDeleteFolder(folder.id);}} className="text-red-400 hover:text-red-300">&times;</button>
-                  )}
+                  <FolderIcon /> {folder.name}
                 </div>
               ))}
             </div>
           </div>
           
-          {/* Columna de Notas */}
-          <div className="md:col-span-1 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-white">Notas</h2>
-              <button onClick={handleAddNote} className="p-2 bg-blue-600 rounded-lg hover:bg-blue-700">
-                <PlusIcon />
-              </button>
-            </div>
-            <div className="space-y-2 overflow-y-auto">
+          {/* Notas */}
+          <div className="md:col-span-1 bg-gray-800 rounded-xl p-4 overflow-y-auto h-full">
+            <button onClick={handleAddNote} className="w-full p-2 bg-green-600 mb-4 rounded">Nueva Nota</button>
+            <div className="space-y-2">
               {notesInFolder.map(note => (
                 <div
                   key={note.id}
                   onClick={() => setSelectedNoteId(note.id)}
-                  className={`p-3 rounded-lg cursor-pointer ${selectedNoteId === note.id ? 'bg-gray-900' : 'bg-gray-700 hover:bg-gray-600'}`}
+                  className={`p-3 rounded cursor-pointer ${selectedNoteId === note.id ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600'}`}
                 >
-                  <h3 className="font-semibold text-white truncate">{note.title}</h3>
-                  <p className="text-sm text-gray-400 truncate">{note.content || 'Sin contenido...'}</p>
+                  <h3 className="font-semibold truncate">{note.title || 'Sin Título'}</h3>
+                  <p className="text-sm text-gray-400 truncate">{note.content ? new Date(note.updatedAt).toLocaleString('es-ES') : 'Vacía'}</p>
                 </div>
               ))}
             </div>
           </div>
-          
-          {/* Editor de Nota */}
-          <div className="md:col-span-2 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
+
+          {/* Editor */}
+          <div className="md:col-span-2 bg-gray-800 rounded-xl p-4 h-full flex flex-col">
             {selectedNote ? (
               <>
                 <input
                   type="text"
                   value={selectedNote.title}
-                  onChange={(e) => handleUpdateNote({ ...selectedNote, title: e.target.value })}
-                  className="w-full p-3 bg-gray-700 border-b border-gray-600 text-2xl font-bold text-white mb-4 outline-none"
+                  onChange={(e) => handleUpdateNote('title', e.target.value)}
+                  placeholder="Título"
+                  className="w-full p-3 bg-gray-700 text-xl font-bold rounded mb-4"
                 />
                 <textarea
                   value={selectedNote.content}
-                  onChange={(e) => handleUpdateNote({ ...selectedNote, content: e.target.value })}
-                  className="w-full h-full p-3 bg-gray-700 rounded-lg text-white outline-none resize-none"
-                  placeholder="Escribe tu nota aquí..."
-                ></textarea>
+                  onChange={(e) => handleUpdateNote('content', e.target.value)}
+                  placeholder="Escribe algo..."
+                  className="w-full p-3 bg-gray-700 rounded flex-grow resize-none"
+                />
                 <button
                   onClick={() => handleDeleteNote(selectedNote.id)}
-                  className="mt-4 p-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  className="w-full p-2 bg-red-600 mt-4 rounded"
                 >
                   Eliminar Nota
                 </button>
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                Selecciona una nota para editar o crea una nueva.
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p>Selecciona una nota para editar o crea una nueva.</p>
               </div>
             )}
           </div>
@@ -909,433 +1174,461 @@
       );
     };
 
-    // --- Vista Estudio (Pomodoro) ---
-    const StudyView = ({ 
-      studyTasks, themes, 
-      onAddStudyTask, onToggleStudyTask, onDeleteStudyTask, 
-      onAddTheme 
-    }) => {
-      // El estado ahora se recibe por props
-      const [newThemeName, setNewThemeName] = useState('');
-      const [filterTheme, setFilterTheme] = useState('all');
+    // --- (ACTUALIZADO) Vista Estudio (Pomodoro + Métricas) ---
+    const StudyView = ({ tasks, themes, onAddTask, onUpdateTask, onDeleteTask, onAddTheme, onPomodoroComplete, totalWorkTime }) => {
+      const POMODORO_DEFAULT = 25 * 60;
+      const [timer, setTimer] = useState(POMODORO_DEFAULT);
+      const [isTimerActive, setIsTimerActive] = useState(false);
+      const [pomodoroDuration, setPomodoroDuration] = useState(POMODORO_DEFAULT);
+      const intervalRef = useRef(null);
+      const showToast = useToast();
       
-      const [pomodoroTime, setPomodoroTime] = useState(25 * 60); // 25 minutos
-      const [isPomodoroActive, setIsPomodoroActive] = useState(false);
-      const [pomodoroIntervalId, setPomodoroIntervalId] = useState(null);
+      const [newTheme, setNewTheme] = useState('');
+      const [selectedThemeId, setSelectedThemeId] = useState('all');
 
-      const formatPomodoroTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-      };
-
-      const startPomodoro = () => {
-        if (pomodoroTime <= 0) return;
-        setIsPomodoroActive(true);
-        const intervalId = setInterval(() => {
-          setPomodoroTime(t => {
-            if (t <= 1) {
-              clearInterval(intervalId);
-              setIsPomodoroActive(false);
-              // TODO: Añadir sonido de notificación
-              return 0;
-            }
-            return t - 1;
-          });
-        }, 1000);
-        setPomodoroIntervalId(intervalId);
-      };
-
-      const pausePomodoro = () => {
-        if (pomodoroIntervalId) {
-          clearInterval(pomodoroIntervalId);
+      // Efecto del temporizador
+      useEffect(() => {
+        if (isTimerActive) {
+          intervalRef.current = setInterval(() => {
+            setTimer(t => {
+              if (t <= 1) {
+                clearInterval(intervalRef.current);
+                setIsTimerActive(false);
+                onPomodoroComplete(pomodoroDuration); // Registra el tiempo trabajado
+                showToast(`¡Pomodoro de ${pomodoroDuration / 60} min completado!`, 'success');
+                return pomodoroDuration; // Reinicia al tiempo original
+              }
+              return t - 1;
+            });
+          }, 1000);
+        } else {
+          clearInterval(intervalRef.current);
         }
-        setIsPomodoroActive(false);
+        return () => clearInterval(intervalRef.current);
+      }, [isTimerActive, pomodoroDuration, onPomodoroComplete, showToast]);
+
+      const formatTime = (timeInSeconds) => {
+        const minutes = Math.floor(timeInSeconds / 60);
+        const seconds = timeInSeconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
       };
       
-      const resetPomodoro = () => {
-        pausePomodoro();
-        setPomodoroTime(25 * 60);
-      };
-      
-      const adjustPomodoro = (minutes) => {
-        if (isPomodoroActive) return;
-        setPomodoroTime(t => Math.max(60, t + (minutes * 60))); // Mínimo 1 minuto
+      const formatTotalWorkTime = (timeInSeconds) => {
+        const hours = Math.floor(timeInSeconds / 3600);
+        const minutes = Math.floor((timeInSeconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
       };
 
-      // Manejo de Tareas de Estudio (ahora llama a props)
-      const handleAddStudyTask = (taskData) => {
-        onAddStudyTask(taskData);
+      const toggleTimer = () => setIsTimerActive(prev => !prev);
+      const resetTimer = () => {
+        setIsTimerActive(false);
+        setTimer(pomodoroDuration);
+      };
+
+      const changeDuration = (amount) => {
+        if (isTimerActive) return;
+        setPomodoroDuration(prev => {
+          const newTime = Math.max(300, prev + amount * 300); // Mínimo 5 minutos (300s)
+          setTimer(newTime);
+          return newTime;
+        });
       };
       
-      const handleToggleStudyTask = (taskId) => {
-        onToggleStudyTask(taskId);
-      };
+      // Lógica de Tareas de Estudio
+      const [taskText, setTaskText] = useState('');
+      const [taskTheme, setTaskTheme] = useState('general');
       
-      const handleDeleteStudyTask = (taskId) => {
-        onDeleteStudyTask(taskId);
+      const handleAddTask = (e) => {
+        e.preventDefault();
+        if (!taskText.trim()) return;
+        onAddTask({
+          id: generateId(),
+          text: taskText,
+          themeId: taskTheme,
+          status: 'pending'
+        });
+        setTaskText('');
       };
       
       const handleAddTheme = (e) => {
         e.preventDefault();
-        if (!newThemeName.trim()) return;
-        onAddTheme(newThemeName); // Llama a la prop
-        setNewThemeName('');
+        if (!newTheme.trim()) return;
+        onAddTheme({ id: generateId(), name: newTheme });
+        setNewTheme('');
       };
       
-      const filteredStudyTasks = useMemo(() =>
-        studyTasks.filter(t => filterTheme === 'all' || t.projectId === filterTheme),
-      [studyTasks, filterTheme]);
+      const filteredTasks = useMemo(() => {
+        if (selectedThemeId === 'all') return tasks;
+        return tasks.filter(t => t.themeId === selectedThemeId);
+      }, [tasks, selectedThemeId]);
+      
+      // (NUEVO) Métricas de Estudio
+      const pendingTasksCount = useMemo(() => 
+        filteredTasks.filter(t => t.status === 'pending').length
+      , [filteredTasks]);
+      
+      const estimatedTime = pendingTasksCount * pomodoroDuration; // Tiempo en segundos
+      
+      const estimatedFinishTime = useMemo(() => {
+        if (estimatedTime === 0) return null;
+        const now = new Date();
+        const finishDate = new Date(now.getTime() + estimatedTime * 1000);
+        return finishDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      }, [estimatedTime]);
 
       return (
-        <div>
-          {/* Sección Pomodoro */}
-          <div className="bg-gray-800 rounded-xl shadow-lg p-8 mb-8 flex flex-col items-center">
-            <h2 className="text-3xl font-bold text-white mb-6">Temporizador Pomodoro</h2>
-            <div className="text-7xl sm:text-8xl font-mono text-white mb-6">{formatPomodoroTime(pomodoroTime)}</div>
-            <div className="flex space-x-4 mb-6">
-              <button onClick={() => isPomodoroActive ? pausePomodoro() : startPomodoro()} className="p-4 px-8 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-lg">
-                {isPomodoroActive ? 'Pausar' : 'Iniciar'}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Columna Pomodoro y Métricas */}
+          <div className="bg-gray-800 rounded-xl p-6 h-fit">
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">Temporizador Pomodoro</h2>
+            <div className="text-7xl sm:text-8xl font-bold text-center text-blue-400 my-8">
+              {formatTime(timer)}
+            </div>
+            <div className="flex justify-center space-x-4 mb-6">
+              <button 
+                onClick={toggleTimer} 
+                className={`p-4 rounded-full ${isTimerActive ? 'bg-yellow-500' : 'bg-green-500'} text-white transition-colors`}
+              >
+                {isTimerActive ? <PauseIcon /> : <PlayIcon />}
               </button>
-              <button onClick={resetPomodoro} className="p-4 px-8 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 text-lg">
-                Reiniciar
+              <button onClick={resetTimer} className="p-4 rounded-full bg-gray-600 text-white flex items-center justify-center">
+                <RefreshIcon />
               </button>
             </div>
-            <div className="flex space-x-2">
-              <button onClick={() => adjustPomodoro(-5)} disabled={isPomodoroActive} className="p-2 px-4 bg-gray-700 text-white rounded-lg disabled:opacity-50">-5 min</button>
-              <button onClick={() => adjustPomodoro(5)} disabled={isPomodoroActive} className="p-2 px-4 bg-gray-700 text-white rounded-lg disabled:opacity-50">+5 min</button>
+            <div className="flex justify-center items-center space-x-4">
+              <button onClick={() => changeDuration(-5)} disabled={isTimerActive} className="p-2 px-4 rounded-lg bg-gray-700 disabled:opacity-50">- 5 min</button>
+              <span className="text-lg font-medium">{pomodoroDuration / 60} min</span>
+              <button onClick={() => changeDuration(5)} disabled={isTimerActive} className="p-2 px-4 rounded-lg bg-gray-700 disabled:opacity-50">+ 5 min</button>
+            </div>
+            
+            {/* (NUEVO) Métricas de Estudio */}
+            <div className="mt-8 pt-6 border-t border-gray-700">
+              <h3 className="text-xl font-semibold text-white mb-4">Métricas de la Sesión</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Tareas Pendientes</p>
+                  <p className="text-2xl font-bold text-white">{pendingTasksCount}</p>
+                </div>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Tiempo Estimado</p>
+                  <p className="text-2xl font-bold text-white">{formatTime(estimatedTime)}</p>
+                </div>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Hora Fin (Est.)</p>
+                  <p className="text-2xl font-bold text-white">{estimatedFinishTime || '---'}</p>
+                </div>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Tiempo Total Trab.</p>
+                  <p className="text-2xl font-bold text-white">{formatTotalWorkTime(totalWorkTime)}</p>
+                </div>
+              </div>
             </div>
           </div>
           
-          {/* Sección Tareas de Estudio */}
-          <div className="bg-gray-800 rounded-xl shadow-lg p-8">
-            <h2 className="text-3xl font-bold text-white mb-6">Tareas de Estudio</h2>
+          {/* Columna Tareas de Estudio */}
+          <div className="bg-gray-800 rounded-xl p-6">
+            <h2 className="text-2xl font-bold text-white mb-4">Tareas de Estudio</h2>
             
-            {/* Formulario de Tarea (simplificado, usa AddTaskForm) */}
-            <AddTaskForm 
-              onAddTask={handleAddStudyTask} 
-              projects={themes} 
-              defaultProjectId="general" 
-            />
-
+            {/* Formulario Añadir Tarea */}
+            <form onSubmit={handleAddTask} className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={taskText}
+                onChange={(e) => setTaskText(e.target.value)}
+                placeholder="Nueva tarea de estudio"
+                className="flex-grow p-3 bg-gray-700 rounded"
+              />
+              <select 
+                value={taskTheme} 
+                onChange={(e) => setTaskTheme(e.target.value)}
+                className="p-3 bg-gray-700 rounded"
+              >
+                {themes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <button type="submit" className="p-3 bg-blue-600 rounded">
+                <PlusIcon />
+              </button>
+            </form>
+            
             {/* Filtros y Temas */}
-            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-between mb-4">
-              <div className="flex space-x-2 overflow-x-auto py-2">
-                <button onClick={() => setFilterTheme('all')} className={`p-2 px-4 rounded-full text-sm ${filterTheme === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>Todos</button>
-                {themes.map(theme => (
-                  <button key={theme.id} onClick={() => setFilterTheme(theme.id)} className={`p-2 px-4 rounded-full text-sm ${filterTheme === theme.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
-                    {theme.name}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={handleAddTheme} className="flex w-full sm:w-auto mt-4 sm:mt-0 sm:ml-4">
-                <input 
-                  type="text" 
-                  value={newThemeName} 
-                  onChange={(e) => setNewThemeName(e.target.value)} 
-                  placeholder="Nuevo tema" 
-                  className="p-2 bg-gray-700 border border-gray-600 rounded-l-lg text-white"
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <select 
+                value={selectedThemeId} 
+                onChange={(e) => setSelectedThemeId(e.target.value)}
+                className="p-2 bg-gray-700 rounded"
+              >
+                <option value="all">Todos los Temas</option>
+                {themes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <form onSubmit={handleAddTheme} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTheme}
+                  onChange={(e) => setNewTheme(e.target.value)}
+                  placeholder="Nuevo tema"
+                  className="flex-grow p-2 bg-gray-700 rounded"
                 />
-                <button type="submit" className="p-2 bg-blue-600 rounded-r-lg">+</button>
+                <button type="submit" className="p-2 bg-gray-600 rounded">Crear</button>
               </form>
             </div>
             
-            {/* Lista de Tareas de Estudio */}
-            <div className="space-y-3">
-              {filteredStudyTasks.map(task => (
-                <div key={task.id} className={`flex items-center justify-between p-3 bg-gray-700 rounded-lg ${task.status === 'completed' ? 'opacity-50' : ''}`}>
+            {/* Lista de Tareas */}
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {filteredTasks.length > 0 ? filteredTasks.map(task => (
+                <div key={task.id} className={`flex justify-between items-center p-3 bg-gray-700 rounded ${task.status === 'completed' ? 'opacity-50' : ''}`}>
                   <div className="flex items-center">
                     <input
                       type="checkbox"
                       checked={task.status === 'completed'}
-                      onChange={() => handleToggleStudyTask(task.id)}
-                      className="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded"
+                      onChange={() => onUpdateTask(task.id, { ...task, status: task.status === 'completed' ? 'pending' : 'completed' })}
+                      className="form-checkbox h-5 w-5 text-blue-500 bg-gray-600 border-gray-500 rounded"
                     />
-                    <div className="ml-4">
-                      <p className={`text-lg text-white ${task.status === 'completed' ? 'line-through' : ''}`}>{task.text}</p>
-                      <span className="text-sm text-blue-300">{themes.find(t => t.id === task.projectId)?.name || 'General'}</span>
-                    </div>
+                    <span className={`ml-3 ${task.status === 'completed' ? 'line-through' : ''}`}>{task.text}</span>
                   </div>
-                  <button onClick={() => handleDeleteStudyTask(task.id)} className="p-2 text-red-400 hover:text-red-300">
+                  <button onClick={() => onDeleteTask(task.id)} className="p-1 text-red-400">
+                    <TrashIcon />
+                  </button>
+                </div>
+              )) : (
+                <p className="text-gray-400 p-3 bg-gray-700 rounded-lg">No hay tareas de estudio en este tema.</p>
+              )}
+            </div>
+            
+          </div>
+        </div>
+      );
+    };
+
+    // --- Componente Planificador de Estudio IA ---
+    const StudyPlannerAI = ({ onClose, themes, onAddTheme, onAddTasks }) => {
+      const [plans, setPlans] = useLocalStorage('study_plans', []);
+      const [currentPlanId, setCurrentPlanId] = useState(null);
+      const [newPlanName, setNewPlanName] = useState('');
+      const [isGenerating, setIsGenerating] = useState(false);
+      const showToast = useToast();
+
+      const currentPlan = useMemo(() => plans.find(p => p.id === currentPlanId), [plans, currentPlanId]);
+
+      const handleAddPlan = () => {
+        if (!newPlanName.trim()) return;
+        const newPlan = {
+          id: generateId(),
+          name: newPlanName,
+          syllabus: '', // Temario
+          generatedSchedule: null // { theme: '...', tasks: [...] }
+        };
+        setPlans(prev => [newPlan, ...prev]);
+        setCurrentPlanId(newPlan.id);
+        setNewPlanName('');
+      };
+
+      const updatePlan = (field, value) => {
+        setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, [field]: value } : p));
+      };
+      
+      const deletePlan = (id) => {
+        setPlans(prev => prev.filter(p => p.id !== id));
+        if (currentPlanId === id) {
+          setCurrentPlanId(null);
+        }
+      };
+
+      const handleGenerateSchedule = async () => {
+        if (!currentPlan || !currentPlan.syllabus) {
+          showToast('Por favor, pega tu temario primero.', 'error');
+          return;
+        }
+        setIsGenerating(true);
+        
+        const systemPrompt = `
+Eres un asistente de planificación de estudios. Tu trabajo es tomar un temario y convertirlo en un plan de estudio JSON.
+El plan debe tener dos claves:
+1.  'theme': Un nombre corto para el tema principal o materia (ej. "Historia", "React", "Marketing Digital").
+2.  'tasks': Un array de strings, donde cada string es un bloque de estudio accionable.
+Genera entre 5 y 15 bloques de estudio, dependiendo del temario.
+No añadas fechas ni horas. Solo la lista de tareas.
+`;
+        const schema = {
+          type: "OBJECT",
+          properties: {
+            "theme": { "type": "STRING", "description": "El nombre del tema o materia." },
+            "tasks": { 
+              "type": "ARRAY", 
+              "items": { "type": "STRING" },
+              "description": "Un array de tareas (bloques de estudio)." 
+            }
+          },
+          required: ["theme", "tasks"]
+        };
+
+        try {
+          const resultJson = await callGemini(currentPlan.syllabus, schema, systemPrompt);
+          updatePlan('generatedSchedule', resultJson);
+          showToast('¡Cronograma generado!', 'success');
+        } catch (e) {
+          console.error(e);
+          showToast('Error al generar el cronograma.', 'error');
+        } finally {
+          setIsGenerating(false);
+        }
+      };
+      
+      const handleConfirmSchedule = () => {
+        if (!currentPlan || !currentPlan.generatedSchedule) return;
+        
+        const { theme, tasks: taskTexts } = currentPlan.generatedSchedule;
+        
+        // 1. Crear el tema si no existe
+        let themeObj = themes.find(t => t.name.toLowerCase() === theme.toLowerCase());
+        if (!themeObj) {
+          themeObj = { id: generateId(), name: theme };
+          onAddTheme(themeObj);
+        }
+        
+        // 2. Crear las tareas
+        const newTasks = taskTexts.map(text => ({
+          id: generateId(),
+          text: text,
+          themeId: themeObj.id,
+          status: 'pending'
+        }));
+        
+        onAddTasks(newTasks);
+        showToast(`Se añadieron ${newTasks.length} tareas a "${themeObj.name}"`, 'success');
+        onClose();
+      };
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[75vh]">
+          {/* Columna de Planes */}
+          <div className="md:col-span-1 bg-gray-700 rounded-xl p-4 overflow-y-auto h-full">
+            <h3 className="text-xl font-bold mb-4">Planes de Estudio</h3>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newPlanName}
+                onChange={(e) => setNewPlanName(e.target.value)}
+                placeholder="Nuevo Plan"
+                className="flex-grow p-2 bg-gray-600 rounded"
+              />
+              <button onClick={handleAddPlan} className="p-2 bg-blue-600 rounded">
+                <PlusIcon />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {plans.map(plan => (
+                <div
+                  key={plan.id}
+                  onClick={() => setCurrentPlanId(plan.id)}
+                  className={`flex justify-between items-center p-3 rounded cursor-pointer ${currentPlanId === plan.id ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+                >
+                  <span className="truncate">{plan.name}</span>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); deletePlan(plan.id); }} 
+                    className="p-1 text-red-400 hover:text-red-300 ml-2 flex-shrink-0"
+                  >
                     <TrashIcon />
                   </button>
                 </div>
               ))}
             </div>
           </div>
+          
+          {/* Columna Editor y Resultado */}
+          {currentPlan ? (
+            <>
+              {/* Editor de Temario */}
+              <div className="md:col-span-1 bg-gray-700 rounded-xl p-4 h-full flex flex-col">
+                <input
+                  type="text"
+                  value={currentPlan.name}
+                  onChange={(e) => updatePlan('name', e.target.value)}
+                  className="w-full p-2 bg-gray-600 text-xl font-bold rounded mb-4"
+                />
+                <textarea
+                  value={currentPlan.syllabus}
+                  onChange={(e) => updatePlan('syllabus', e.target.value)}
+                  placeholder="Pega tu temario o plan de estudio aquí..."
+                  className="w-full p-3 bg-gray-600 rounded flex-grow resize-none"
+                />
+                <button
+                  onClick={handleGenerateSchedule}
+                  disabled={isGenerating}
+                  className="w-full p-3 bg-purple-600 mt-4 rounded flex items-center justify-center disabled:opacity-50"
+                >
+                  {isGenerating ? 'Generando...' : 'Generar Cronograma (IA)'}
+                </button>
+              </div>
+              
+              {/* Cronograma Generado */}
+              <div className="md:col-span-1 bg-gray-700 rounded-xl p-4 h-full overflow-y-auto">
+                <h3 className="text-xl font-bold mb-4">Cronograma Sugerido</h3>
+                {currentPlan.generatedSchedule ? (
+                  <>
+                    <h4 className="text-lg font-semibold text-blue-300 mb-2">Tema: {currentPlan.generatedSchedule.theme}</h4>
+                    <ul className="list-disc list-inside space-y-2">
+                      {currentPlan.generatedSchedule.tasks.map((task, index) => (
+                        <li key={index}>{task}</li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={handleConfirmSchedule}
+                      className="w-full p-3 bg-green-600 mt-6 rounded"
+                    >
+                      Confirmar y Crear Tareas
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-gray-400">Genera un cronograma para ver los resultados.</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="md:col-span-2 bg-gray-700 rounded-xl p-4 h-full flex items-center justify-center">
+              <p className="text-gray-400">Selecciona o crea un plan de estudio.</p>
+            </div>
+          )}
         </div>
       );
     };
 
+    // --- Componente Temporizador Flotante ---
+    const TimerDisplay = ({ task, onStop }) => {
+      const [timeLeft, setTimeLeft] = useState(5 * 60); // 5 minutos
 
-    // --- (NUEVO) Planificador de Estudio IA ---
-    const StudyPlannerAI = ({ onClose, onAddStudyTask, onAddTheme }) => {
-      const [plans, setPlans] = useLocalStorage('ai_study_plans', []);
-      const [selectedPlan, setSelectedPlan] = useState(null);
-      const [isLoading, setIsLoading] = useState(false);
-      const [error, setError] = useState(null);
-
-      // Estado de edición
-      const [currentName, setCurrentName] = useState('');
-      const [currentSyllabus, setCurrentSyllabus] = useState('');
-      const [generatedSchedule, setGeneratedSchedule] = useState(null);
-
-      const selectPlan = (plan) => {
-        setSelectedPlan(plan);
-        setCurrentName(plan.name);
-        setCurrentSyllabus(plan.syllabusText);
-        setGeneratedSchedule(plan.generatedSchedule || null);
-        setError(null);
-      };
-
-      const handleCreateNewPlan = () => {
-        const newPlan = {
-          id: generateId(),
-          name: 'Nuevo Plan de Estudio',
-          syllabusText: 'Pega tu temario aquí...',
-          generatedSchedule: null
-        };
-        setPlans(prev => [newPlan, ...prev]);
-        selectPlan(newPlan);
-      };
-
-      const handleSavePlan = () => {
-        if (!selectedPlan) return;
-        const updatedPlan = {
-          ...selectedPlan,
-          name: currentName,
-          syllabusText: currentSyllabus,
-          generatedSchedule: generatedSchedule // Guardar también el cronograma
-        };
-        setPlans(prev => prev.map(p => p.id === selectedPlan.id ? updatedPlan : p));
-        setSelectedPlan(updatedPlan);
-      };
-      
-      const handleDeletePlan = () => {
-        if (!selectedPlan) return;
-        setPlans(prev => prev.filter(p => p.id !== selectedPlan.id));
-        setSelectedPlan(null);
-        setCurrentName('');
-        setCurrentSyllabus('');
-        setGeneratedSchedule(null);
-      };
-
-      const callGeminiAPI = async (syllabus, retries = 3, delay = 1000) => {
-        const apiKey = ""; // API key is handled by the environment
-        const apiUrl = `https://generativLanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-        const systemPrompt = `Eres un asistente experto en planificación de estudios. Tu tarea es analizar el siguiente plan de estudios (syllabus) y dividirlo en una lista de bloques de estudio accionables.
-Responde *únicamente* con un objeto JSON válido que siga este esquema.
-El 'tema' debe ser el nombre general de la materia (ej: "Historia Antigua", "Programación en React").
-Cada 'bloque' debe ser una tarea discreta y específica.
-
-Esquema JSON:
-{
-  "type": "OBJECT",
-  "properties": {
-    "tema": { "type": "STRING" },
-    "bloques": {
-      "type": "ARRAY",
-      "items": {
-        "type": "OBJECT",
-        "properties": {
-          "titulo": { "type": "STRING" },
-          "descripcion": { "type": "STRING" }
+      useEffect(() => {
+        if (timeLeft <= 0) {
+          onStop(true); // true = completado
+          return;
         }
-      }
-    }
-  }
-}`;
-        
-        const payload = {
-          contents: [{ parts: [{ text: syllabus }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                "tema": { "type": "STRING" },
-                "bloques": {
-                  "type": "ARRAY",
-                  "items": {
-                    "type": "OBJECT",
-                    "properties": {
-                      "titulo": { "type": "STRING" },
-                      "descripcion": { "type": "STRING" }
-                    },
-                    "required": ["titulo"]
-                  }
-                }
-              },
-              "required": ["tema", "bloques"]
-            }
-          }
-        };
+        const timerId = setInterval(() => {
+          setTimeLeft(t => t - 1);
+        }, 1000);
+        return () => clearInterval(timerId);
+      }, [timeLeft, onStop]);
 
-        try {
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!response.ok) {
-            throw new Error(`API error: ${response.statusText}`);
-          }
-
-          const result = await response.json();
-          const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-          
-          if (!jsonText) {
-            throw new Error("No se recibió contenido válido de la IA.");
-          }
-          
-          return JSON.parse(jsonText);
-
-        } catch (error) {
-          if (retries > 0) {
-            await new Promise(res => setTimeout(res, delay));
-            return callGeminiAPI(syllabus, retries - 1, delay * 2);
-          } else {
-            throw error;
-          }
-        }
-      };
-
-      const handleGenerateSchedule = async () => {
-        if (!selectedPlan) return;
-        setIsLoading(true);
-        setError(null);
-        setGeneratedSchedule(null);
-        try {
-          const schedule = await callGeminiAPI(currentSyllabus);
-          setGeneratedSchedule(schedule);
-          // Auto-guardar el plan con el cronograma generado
-          const updatedPlan = { ...selectedPlan, name: currentName, syllabusText: currentSyllabus, generatedSchedule: schedule };
-          setPlans(prev => prev.map(p => p.id === selectedPlan.id ? updatedPlan : p));
-          setSelectedPlan(updatedPlan);
-        } catch (err) {
-          console.error(err);
-          setError("Error al generar el cronograma. Inténtalo de nuevo.");
-        }
-        setIsLoading(false);
-      };
-
-      const handleConfirmSchedule = () => {
-        if (!generatedSchedule || !generatedSchedule.bloques) return;
-        
-        // 1. Añadir el tema (o encontrar el existente)
-        const themeId = onAddTheme(generatedSchedule.tema);
-        
-        // 2. Añadir cada bloque como una tarea de estudio
-        generatedSchedule.bloques.forEach(bloque => {
-          const newStudyTask = {
-            text: bloque.titulo,
-            projectId: themeId, // ID del tema
-            date: null,
-            time: null,
-            notes: bloque.descripcion || '',
-          };
-          onAddStudyTask(newStudyTask); // Llama a la función de App
-        });
-        
-        // 3. Cerrar el modal
-        onClose();
+      const formatTime = (timeInSeconds) => {
+        const minutes = Math.floor(timeInSeconds / 60);
+        const seconds = timeInSeconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
       };
 
       return (
-        <div className="bg-gray-800 p-0 rounded-xl" style={{width: '90vw', height: '85vh', maxWidth: '1200px'}}>
-          <div className="grid grid-cols-1 md:grid-cols-4 h-full">
-            {/* Columna de Planes */}
-            <div className="md:col-span-1 bg-gray-900 p-4 flex flex-col rounded-l-xl">
-              <h2 className="text-2xl font-bold text-white mb-4">Planes de Estudio</h2>
-              <button onClick={handleCreateNewPlan} className="w-full p-3 mb-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
-                Nuevo Plan
-              </button>
-              <div className="space-y-2 overflow-y-auto">
-                {plans.map(plan => (
-                  <div
-                    key={plan.id}
-                    onClick={() => selectPlan(plan)}
-                    className={`p-3 rounded-lg cursor-pointer ${selectedPlan?.id === plan.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
-                  >
-                    <h3 className="font-semibold text-white truncate">{plan.name}</h3>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Editor y Cronograma */}
-            {selectedPlan ? (
-              <>
-                {/* Columna Editor */}
-                <div className="md:col-span-1 bg-gray-800 p-4 flex flex-col border-l border-r border-gray-700">
-                  <h3 className="text-xl font-bold text-white mb-4">Editor del Plan</h3>
-                  <input
-                    type="text"
-                    value={currentName}
-                    onChange={(e) => setCurrentName(e.target.value)}
-                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
-                    placeholder="Nombre del Plan"
-                  />
-                  <textarea
-                    value={currentSyllabus}
-                    onChange={(e) => setCurrentSyllabus(e.target.value)}
-                    className="w-full h-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white outline-none resize-none mb-4"
-                    placeholder="Pega tu temario aquí..."
-                  ></textarea>
-                  <div className="flex space-x-2">
-                    <button onClick={handleSavePlan} className="flex-1 p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">Guardar</button>
-                    <button onClick={handleDeletePlan} className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700"><TrashIcon /></button>
-                  </div>
-                  <button
-                    onClick={handleGenerateSchedule}
-                    disabled={isLoading}
-                    className="w-full mt-4 p-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {isLoading ? "Generando..." : "Generar Cronograma (IA)"}
-                  </button>
-                </div>
-                
-                {/* Columna Cronograma */}
-                <div className="md:col-span-2 bg-gray-800 p-4 flex flex-col rounded-r-xl">
-                  <h3 className="text-xl font-bold text-white mb-4">Cronograma Sugerido</h3>
-                  {error && <p className="text-red-400">{error}</p>}
-                  {isLoading && <LoadingSpinner />}
-                  {generatedSchedule && (
-                    <div className="flex flex-col h-full">
-                      <div className="bg-gray-700 p-4 rounded-lg overflow-y-auto flex-grow">
-                        <h4 className="text-lg font-semibold text-blue-300 mb-2">Tema: {generatedSchedule.tema}</h4>
-                        <ul className="list-disc list-inside space-y-2">
-                          {generatedSchedule.bloques.map((bloque, index) => (
-                            <li key={index} className="p-2 bg-gray-800 rounded">
-                              <strong className="text-white">{bloque.titulo}</strong>
-                              {bloque.descripcion && <p className="text-sm text-gray-400 ml-4">{bloque.descripcion}</p>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <button
-                        onClick={handleConfirmSchedule}
-                        className="w-full mt-4 p-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700"
-                      >
-                        Confirmar y Crear Tareas en "Estudio"
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="md:col-span-3 flex items-center justify-center h-full text-gray-500 p-4">
-                Selecciona un plan o crea uno nuevo para comenzar.
-              </div>
-            )}
+        <div className="fixed bottom-4 right-4 bg-gray-800 border-2 border-blue-500 shadow-lg rounded-xl p-4 w-80 z-50">
+          <p className="text-sm text-gray-300">Enfocado en:</p>
+          <p className="text-lg font-semibold truncate mb-2">{task.text}</p>
+          <div className="text-4xl font-bold text-center text-blue-400 my-3">
+            {formatTime(timeLeft)}
           </div>
+          <button
+            onClick={() => onStop(false)} // false = no completado
+            className="w-full p-2 bg-red-600 text-white font-semibold rounded-lg"
+          >
+            Detener
+          </button>
         </div>
       );
     };
-
 
     // --- Componente Principal: App ---
     function App() {
@@ -1351,87 +1644,125 @@ Esquema JSON:
       // Estado de Estudio (centralizado)
       const [studyTasks, setStudyTasks] = useLocalStorage('study_tasks', []);
       const [studyThemes, setStudyThemes] = useLocalStorage('study_themes', [{ id: 'general', name: 'General' }]);
-
+      // (NUEVO) Estado de métricas de estudio
+      const [totalWorkTime, setTotalWorkTime] = useLocalStorage('study_total_work_time', 0);
+      
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [editingTask, setEditingTask] = useState(null);
-      const [isPlannerOpen, setIsPlannerOpen] = useState(false); // Modal del Planificador
+      const [focusTask, setFocusTask] = useState(null); // Tarea para el temporizador de 5 min
       
-      const [focusTask, setFocusTask] = useState(null);
-      const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+      const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+      
+      const showToast = useToast();
 
-      // --- CRUD de Tareas ---
-      const handleAddTask = (newTask) => {
-        setTasks(prevTasks => [...prevTasks, newTask]);
-      };
-
-      const handleUpdateTask = (updatedTask) => {
-        setTasks(prevTasks =>
-          prevTasks.map(task => (task.id === updatedTask.id ? updatedTask : task))
-        );
+      // --- Funciones CRUD de Tareas ---
+      const handleAddTask = (task) => {
+        setTasks(prev => [task, ...prev]);
       };
       
-      const handleToggleComplete = (taskId) => {
-        setTasks(prevTasks => 
-          prevTasks.map(task => 
-            task.id === taskId 
-              ? { ...task, status: task.status === 'pending' ? 'completed' : 'pending' }
-              : task
-          )
-        );
-      };
+      // Función de añadir tarea con IA
+      const handleAiAddTask = async (prompt, selectedProjectId) => {
+        const today = new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-      const handleDeleteTask = (taskId) => {
-        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-      };
-      
-      // --- CRUD de Proyectos ---
-      const handleAddProject = (newProject) => {
-        setProjects(prev => [...prev, newProject]);
-      };
-      
-      const handleDeleteProject = (projectId) => {
-        if (projectId === 'inbox') return;
-        setProjects(prev => prev.filter(p => p.id !== projectId));
-        // Opcional: mover tareas a 'inbox'
-        setTasks(prev => prev.map(t => t.projectId === projectId ? { ...t, projectId: 'inbox' } : t));
-      };
-
-      // --- CRUD de Tareas de Estudio (Centralizado) ---
-      const handleAddStudyTask = (taskData) => {
-        const newTask = { 
-          ...taskData, 
-          id: generateId(), 
-          status: 'pending' 
+        const systemPrompt = `
+Eres un asistente para una app de agenda. Tu única función es tomar un texto en lenguaje natural y convertirlo en un objeto JSON estructurado para una tarea.
+La fecha de hoy es: ${today}. Usa esto como referencia para "mañana", "el viernes", "próximo lunes", etc.
+El formato de fecha de salida DEBE ser 'YYYY-MM-DD'.
+El formato de hora de salida DEBE ser 'HH:mm' (24 horas).
+Si no se especifica una hora, deja el campo 'time' como una cadena vacía ('').
+Si no se especifica una fecha, deja el campo 'date' como una cadena vacía ('').
+El campo 'text' debe ser solo la descripción de la tarea, sin la fecha/hora.
+NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
+`;
+        const schema = {
+          type: "OBJECT",
+          properties: {
+            "text": { "type": "STRING", "description": "La descripción de la tarea." },
+            "date": { "type": "STRING", "description": "La fecha de la tarea en formato YYYY-MM-DD. Vacío si no se especifica." },
+            "time": { "type": "STRING", "description": "La hora de la tarea en formato HH:mm. Vacío si no se especifica." }
+          },
+          required: ["text", "date", "time"]
         };
-        setStudyTasks(prev => [...prev, newTask]);
+        
+        try {
+          const resultJson = await callGemini(prompt, schema, systemPrompt);
+          
+          handleAddTask({
+            id: generateId(),
+            text: resultJson.text || prompt, // Fallback al prompt si el texto está vacío
+            date: resultJson.date || '',
+            time: resultJson.time || '',
+            projectId: selectedProjectId, // Usa el ID seleccionado manualmente
+            status: 'pending'
+          });
+          showToast('¡Tarea creada por IA!', 'success');
+
+        } catch (error) {
+          console.error('Error procesando tarea con IA:', error);
+          showToast('Error de la IA: No se pudo analizar la tarea.', 'error');
+          // Fallback: crear la tarea con el texto plano
+          handleAddTask({
+            id: generateId(),
+            text: prompt, // Tarea de texto plano
+            date: '',
+            time: '',
+            projectId: selectedProjectId, // Usa el ID seleccionado manualmente
+            status: 'pending'
+          });
+          showToast('Se creó una tarea simple sin fecha.', 'info');
+          throw error; // Propagar el error para que el formulario sepa que falló
+        }
       };
-      
-      const handleToggleStudyTask = (taskId) => {
-        setStudyTasks(prev => prev.map(t => 
-          t.id === taskId ? { ...t, status: t.status === 'pending' ? 'completed' : 'pending' } : t
+
+
+      const handleUpdateTask = (id, updatedTask) => {
+        setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updatedTask } : t)));
+      };
+
+      const handleToggleComplete = (id) => {
+        const today = getTodayISO();
+        setTasks(prev => prev.map(t =>
+          t.id === id
+            ? { 
+                ...t, 
+                status: t.status === 'completed' ? 'pending' : 'completed',
+                completedDate: t.status !== 'completed' ? today : null // (NUEVO) Sella la fecha de completado
+              }
+            : t
         ));
       };
-      
-      const handleDeleteStudyTask = (taskId) => {
-        setStudyTasks(prev => prev.filter(t => t.id !== taskId));
+
+      const handleDeleteTask = (id) => {
+        setTasks(prev => prev.filter(t => t.id !== id));
       };
       
-      const handleAddTheme = (themeName) => {
-        let themeId;
-        const existing = studyThemes.find(t => t.name.toLowerCase() === themeName.toLowerCase());
-        
-        if (existing) {
-          themeId = existing.id;
-        } else {
-          const newTheme = { id: generateId(), name: themeName };
-          themeId = newTheme.id;
-          setStudyThemes(prev => [...prev, newTheme]);
-        }
-        return themeId; // Devuelve el ID (nuevo o existente)
+      // --- Funciones CRUD de Proyectos ---
+      const handleAddProject = (project) => {
+        setProjects(prev => [project, ...prev]);
+      };
+      
+      const handleDeleteProject = (id) => {
+        if (id === 'inbox') return;
+        setProjects(prev => prev.filter(p => p.id !== id));
+        // Opcional: Reasignar tareas huerfanas a 'inbox'
+        setTasks(prev => prev.map(t => t.projectId === id ? { ...t, projectId: 'inbox' } : t));
+      };
+      
+      // --- Funciones CRUD de Estudio ---
+      const handleAddStudyTask = (task) => setStudyTasks(prev => [task, ...prev]);
+      const handleAddStudyTasks = (tasks) => setStudyTasks(prev => [...tasks, ...prev]);
+      const handleUpdateStudyTask = (id, updatedTask) => {
+        setStudyTasks(prev => prev.map(t => (t.id === id ? updatedTask : t)));
+      };
+      const handleDeleteStudyTask = (id) => setStudyTasks(prev => prev.filter(t => t.id !== id));
+      const handleAddStudyTheme = (theme) => setStudyThemes(prev => [theme, ...prev]);
+      
+      // (NUEVO) Callback de Pomodoro
+      const handlePomodoroComplete = (secondsWorked) => {
+        setTotalWorkTime(prev => prev + secondsWorked);
       };
 
-
-      // --- Modales ---
+      // --- Handlers de Modal ---
       const handleEditTask = (task) => {
         setEditingTask(task);
         setIsModalOpen(true);
@@ -1441,31 +1772,34 @@ Esquema JSON:
         setEditingTask(null);
       };
       
-      // --- Timer de 5 min ---
+      // --- Handlers de Timer 5 min ---
       const handleStartTimer = (task) => {
         setFocusTask(task);
       };
-      
-      const handleFocusComplete = () => {
-        setIsFocusModalOpen(true);
+      const handleStopTimer = (completed) => {
+        if (completed && focusTask) {
+          handleToggleComplete(focusTask.id);
+          showToast(`¡Tarea "${focusTask.text}" completada!`, 'success');
+        }
+        setFocusTask(null);
       };
-
+      
+      // --- Renderizado de Vista ---
       const renderView = () => {
         switch (view) {
           case 'dashboard':
             return <DashboardView 
-              tasks={tasks}
+              tasks={tasks} 
               projects={projects}
-              onAddTask={handleAddTask}
+              onAiAddTask={handleAiAddTask}
               onUpdateTask={handleToggleComplete}
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
               onStartTimer={handleStartTimer}
-              onOpenPlanner={() => setIsPlannerOpen(true)} // Pasar la función
             />;
           case 'agenda':
             return <AgendaView 
-              tasks={tasks}
+              tasks={tasks} 
               projects={projects}
               onEditTask={handleEditTask}
             />;
@@ -1475,23 +1809,25 @@ Esquema JSON:
               tasks={tasks}
               onAddProject={handleAddProject}
               onDeleteProject={handleDeleteProject}
-              onAddTask={handleAddTask}
+              onAiAddTask={handleAiAddTask}
               onUpdateTask={handleToggleComplete}
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
               onStartTimer={handleStartTimer}
-              onOpenPlanner={() => setIsPlannerOpen(true)} // Pasar la función
+              onShowPlanner={() => setIsPlannerOpen(true)}
             />;
           case 'notes':
             return <NotesView />;
           case 'study':
             return <StudyView 
-              studyTasks={studyTasks}
+              tasks={studyTasks}
               themes={studyThemes}
-              onAddStudyTask={handleAddStudyTask}
-              onToggleStudyTask={handleToggleStudyTask}
-              onDeleteStudyTask={handleDeleteStudyTask}
-              onAddTheme={handleAddTheme}
+              onAddTask={handleAddStudyTask}
+              onUpdateTask={handleUpdateStudyTask}
+              onDeleteTask={handleDeleteStudyTask}
+              onAddTheme={handleAddStudyTheme}
+              onPomodoroComplete={handlePomodoroComplete}
+              totalWorkTime={totalWorkTime}
             />;
           default:
             return null;
@@ -1499,97 +1835,73 @@ Esquema JSON:
       };
 
       return (
-        <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
-            
-            <header className="mb-8">
-              <h1 className="text-4xl font-bold text-white mb-6 text-center sm:text-left">Agenda Digital</h1>
-              <nav className="flex flex-wrap justify-center bg-gray-800 rounded-lg p-2 shadow-lg space-x-1 sm:space-x-2">
-                {[
-                  { id: 'dashboard', label: 'Inicio', icon: <DashboardIcon /> },
-                  { id: 'agenda', label: 'Agenda', icon: <CalendarIcon /> },
-                  { id: 'projects', label: 'Proyectos', icon: <ProjectIcon /> },
-                  { id: 'notes', label: 'Anotaciones', icon: <NotesIcon /> },
-                  { id: 'study', label: 'Estudio', icon: <StudyIcon /> },
-                ].map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => setView(item.id)}
-                    className={`flex-1 flex items-center justify-center p-3 font-medium rounded-md transition-colors ${
-                      view === item.id 
-                        ? 'bg-blue-600 text-white shadow-md' 
-                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
-                  >
-                    {item.icon}
-                    <span className="hidden sm:inline-block ml-2">{item.label}</span>
-                  </button>
-                ))}
-              </nav>
-            </header>
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          
+          <header className="mb-6 sm:mb-8">
+            <h1 className="text-4xl font-bold text-white mb-6 text-center sm:text-left">Mi Agenda Digital</h1>
+            <nav className="flex flex-wrap justify-center bg-gray-800 rounded-lg p-2 shadow-lg gap-1">
+              {[
+                { id: 'dashboard', label: 'Inicio', icon: <DashboardIcon /> },
+                { id: 'agenda', label: 'Agenda', icon: <CalendarIcon /> },
+                { id: 'projects', label: 'Proyectos', icon: <ProjectIcon /> },
+                { id: 'notes', label: 'Anotaciones', icon: <NoteIcon /> },
+                { id: 'study', label: 'Estudio', icon: <ChartBarIcon /> }, // Ícono cambiado
+              ].map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setView(item.id)}
+                  className={`flex-grow flex sm:flex-none items-center justify-center p-3 font-medium rounded-md transition-colors ${
+                    view === item.id 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  {item.icon}
+                  <span className="ml-2 hidden sm:inline-block">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </header>
 
-            <main>
-              {renderView()}
-            </main>
-            
-            <Modal isOpen={isModalOpen} onClose={handleCloseModal}>
-              {editingTask && (
-                <EditTaskForm 
-                  task={editingTask}
-                  onUpdate={handleUpdateTask}
-                  onClose={handleCloseModal}
-                  projects={projects}
-                />
-              )}
-            </Modal>
-            
-            {/* Modal del Planificador IA */}
-            <Modal isOpen={isPlannerOpen} onClose={() => setIsPlannerOpen(false)}>
-              <StudyPlannerAI
-                onClose={() => setIsPlannerOpen(false)}
-                onAddStudyTask={handleAddStudyTask}
-                onAddTheme={handleAddTheme}
-              />
-            </Modal>
-            
-            {focusTask && (
-              <FocusTimer 
-                task={focusTask}
-                onComplete={handleFocusComplete}
-                onClose={() => setFocusTask(null)}
+          <main>
+            {renderView()}
+          </main>
+          
+          <Modal isOpen={isModalOpen} onClose={handleCloseModal}>
+            {editingTask && (
+              <EditTaskForm 
+                task={editingTask}
+                onUpdate={handleUpdateTask}
+                onClose={handleCloseModal}
+                onDelete={handleDeleteTask}
+                projects={projects}
               />
             )}
-            
-            <Modal isOpen={isFocusModalOpen} onClose={() => setIsFocusModalOpen(false)}>
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-4">¡Tiempo!</h2>
-                <p className="text-lg text-gray-300 mb-6">
-                  Se completaron los 5 minutos de enfoque para: <br />
-                  <span className="font-semibold text-white">{focusTask?.text}</span>
-                </p>
-                <button
-                  onClick={() => {
-                    setIsFocusModalOpen(false);
-                    setFocusTask(null);
-                  }}
-                  className="p-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
-                >
-                  Aceptar
-                </button>
-              </div>
-            </Modal>
-            
-          </div>
+          </Modal>
+          
+          <Modal isOpen={isPlannerOpen} onClose={() => setIsPlannerOpen(false)}>
+            <StudyPlannerAI
+              onClose={() => setIsPlannerOpen(false)}
+              themes={studyThemes}
+              onAddTheme={handleAddStudyTheme}
+              onAddTasks={handleAddStudyTasks}
+            />
+          </Modal>
+
+          {focusTask && (
+            <TimerDisplay task={focusTask} onStop={handleStopTimer} />
+          )}
+          
         </div>
       );
     }
 
-    // --- Renderizar la App ---
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
-    root.render(<App />);
-
+    ReactDOM.render(
+      <ToastProvider>
+        <App />
+      </ToastProvider>,
+      document.getElementById('root')
+    );
   </script>
-
 </body>
 </html>
