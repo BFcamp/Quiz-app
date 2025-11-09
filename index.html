@@ -44,6 +44,32 @@
       return '_' + Math.random().toString(36).substr(2, 9);
     };
 
+    // --- (NUEVO) Colores predefinidos para Proyectos ---
+    const PROJECT_COLORS = [
+      '#60a5fa', // blue-400
+      '#f87171', // red-400
+      '#4ade80', // green-400
+      '#facc15', // yellow-400
+      '#c084fc', // purple-400
+      '#fb923c', // orange-400
+    ];
+
+    // --- (NUEVO) Utilidad para contraste de color ---
+    const getContrastColor = (hexcolor) => {
+      if (!hexcolor) return '#FFFFFF'; // Default to white text
+      hexcolor = hexcolor.replace('#', '');
+      if (hexcolor.length === 3) {
+        hexcolor = hexcolor.split('').map(hex => hex + hex).join('');
+      }
+      const r = parseInt(hexcolor.substr(0, 2), 16);
+      const g = parseInt(hexcolor.substr(2, 2), 16);
+      const b = parseInt(hexcolor.substr(4, 2), 16);
+      const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      // Retorna negro si el fondo es claro, blanco si es oscuro
+      return (yiq >= 128) ? '#000000' : '#FFFFFF';
+    };
+
+
     // --- Iconos (Componentes SVG) ---
     const CalendarIcon = () => (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -94,6 +120,13 @@
       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
+    );
+
+    // --- Componente de Carga (Nuevo) ---
+    const LoadingSpinner = () => (
+      <div className="flex justify-center items-center h-full">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
     );
 
     // --- Hook Personalizado: useLocalStorage ---
@@ -170,7 +203,7 @@
       const isCompleted = task.status === 'completed';
 
       return (
-        <div className={`flex items-center justify-between p-3 bg-gray-800 rounded-lg shadow mb-3 transition-all duration-200 ${isCompleted ? 'opacity-50' : ''}`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-800 rounded-lg shadow mb-3 transition-all duration-200 ${isCompleted ? 'opacity-50' : ''}`}>
           <div className="flex items-center w-full overflow-hidden">
             <input
               type="checkbox"
@@ -194,17 +227,23 @@
                   </span>
                 )}
                 {project && (
-                  <span className="flex items-center px-2 py-0.5 bg-gray-700 text-blue-300 rounded-full text-xs font-semibold">
+                  <span 
+                    className="flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                    style={{ 
+                      backgroundColor: project.color || '#4b5563', // bg-gray-600 default
+                      color: getContrastColor(project.color || '#4b5563') 
+                    }}
+                  >
                     <ProjectIcon /> {project.name}
                   </span>
                 )}
               </div>
             </div>
           </div>
-          <div className="flex-shrink-0 flex space-x-2 ml-4">
+          <div className="w-full sm:w-auto flex-shrink-0 flex space-x-2 justify-end mt-3 sm:mt-0 sm:ml-4">
             <button
               onClick={() => onStartTimer(task)}
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
+              className="p-2 text-green-400 hover:text-green-300 hover:bg-gray-700 rounded-full transition-colors"
               title="Iniciar 5 min"
             >
               <TimerIcon />
@@ -559,7 +598,7 @@
               return (
                 <div 
                   key={index}
-                  className={`h-32 rounded-lg p-2 ${isCurrentMonth ? 'bg-gray-700' : 'bg-gray-900 opacity-50'} ${isToday ? 'border-2 border-blue-500' : ''} overflow-y-auto`}
+                  className={`h-24 sm:h-32 rounded-lg p-2 ${isCurrentMonth ? 'bg-gray-700' : 'bg-gray-900 opacity-50'} ${isToday ? 'border-2 border-blue-500' : ''} overflow-y-auto`}
                 >
                   <span className={`font-semibold ${isToday ? 'text-blue-400' : 'text-white'}`}>
                     {date.getDate()}
@@ -571,7 +610,11 @@
                         <div 
                           key={task.id}
                           onClick={() => onEditTask(task)}
-                          className={`text-xs p-1 rounded mb-1 cursor-pointer ${task.status === 'completed' ? 'bg-green-800 line-through' : 'bg-blue-800'} hover:bg-blue-700`}
+                          className={`text-xs p-1 rounded mb-1 cursor-pointer ${task.status === 'completed' ? 'bg-green-800 line-through opacity-70' : ''} hover:opacity-80`}
+                          style={task.status !== 'completed' ? {
+                            backgroundColor: project?.color || '#3b82f6', // default blue
+                            color: getContrastColor(project?.color || '#3b82f6')
+                          } : {}} // Usa estilos por defecto si está completada
                         >
                           {task.time && <span className="font-bold">{task.time}</span>} {task.text}
                         </div>
@@ -589,16 +632,24 @@
     // --- Vista Proyectos ---
     const ProjectsView = ({ 
       projects, tasks, onAddProject, onDeleteProject, 
-      onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer 
+      onAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer,
+      onOpenPlanner // Prop Nueva
     }) => {
       const [selectedProjectId, setSelectedProjectId] = useState('inbox');
       const [newProjectName, setNewProjectName] = useState('');
+      const [newProjectColor, setNewProjectColor] = useState(PROJECT_COLORS[0]); // (NUEVO) Estado para color
 
       const handleAddProject = (e) => {
         e.preventDefault();
         if (!newProjectName.trim()) return;
-        onAddProject({ id: generateId(), name: newProjectName, description: '' });
+        onAddProject({ 
+          id: generateId(), 
+          name: newProjectName, 
+          description: '',
+          color: newProjectColor // Añadir color al proyecto
+        });
         setNewProjectName('');
+        setNewProjectColor(PROJECT_COLORS[0]); // Resetear color
       };
 
       const selectedProject = useMemo(() => 
@@ -615,6 +666,18 @@
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 bg-gray-800 rounded-xl shadow-lg p-6">
             <h2 className="text-2xl font-bold text-white mb-4">Proyectos</h2>
+
+            {/* Botón para el Planificador IA (NUEVO) */}
+            <button
+              onClick={onOpenPlanner}
+              className="w-full p-3 mb-6 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l.707.707M6.343 17.657l-.707.707m12.728 0l.707-.707" />
+              </svg>
+              Planificador de Estudio IA
+            </button>
+
             <form onSubmit={handleAddProject} className="mb-6">
               <input
                 type="text"
@@ -623,6 +686,21 @@
                 placeholder="Nombre del nuevo proyecto"
                 className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
               />
+
+              {/* (NUEVO) Selector de Color */}
+              <div className="flex justify-between my-3 px-1">
+                {PROJECT_COLORS.map(color => (
+                  <button
+                    type="button"
+                    key={color}
+                    onClick={() => setNewProjectColor(color)}
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${newProjectColor === color ? 'border-white scale-110' : 'border-transparent opacity-70'}`}
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  ></button>
+                ))}
+              </div>
+              
               <button type="submit" className="w-full p-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
                 Crear Proyecto
               </button>
@@ -635,7 +713,14 @@
                   onClick={() => setSelectedProjectId(project.id)}
                   className={`flex justify-between items-center p-4 rounded-lg cursor-pointer ${selectedProjectId === project.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
                 >
-                  <span className="font-medium">{project.name}</span>
+                  <div className="flex items-center">
+                    {/* (NUEVO) Círculo de color */}
+                    <span 
+                      className="w-4 h-4 rounded-full mr-3 flex-shrink-0 border border-gray-900"
+                      style={{ backgroundColor: project.color || '#4b5563' }}
+                    ></span>
+                    <span className="font-medium">{project.name}</span>
+                  </div>
                   {project.id !== 'inbox' && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
@@ -740,7 +825,7 @@
       [notes, selectedNoteId]);
 
       return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[75vh]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:h-[75vh]">
           {/* Columna de Carpetas */}
           <div className="md:col-span-1 bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
             <h2 className="text-2xl font-bold text-white mb-4">Carpetas</h2>
@@ -825,9 +910,12 @@
     };
 
     // --- Vista Estudio (Pomodoro) ---
-    const StudyView = ({ onAddTask, projects }) => {
-      const [studyTasks, setStudyTasks] = useLocalStorage('study_tasks', []);
-      const [themes, setThemes] = useLocalStorage('study_themes', [{ id: 'general', name: 'General' }]);
+    const StudyView = ({ 
+      studyTasks, themes, 
+      onAddStudyTask, onToggleStudyTask, onDeleteStudyTask, 
+      onAddTheme 
+    }) => {
+      // El estado ahora se recibe por props
       const [newThemeName, setNewThemeName] = useState('');
       const [filterTheme, setFilterTheme] = useState('all');
       
@@ -875,25 +963,23 @@
         setPomodoroTime(t => Math.max(60, t + (minutes * 60))); // Mínimo 1 minuto
       };
 
-      // Manejo de Tareas de Estudio
+      // Manejo de Tareas de Estudio (ahora llama a props)
       const handleAddStudyTask = (taskData) => {
-        setStudyTasks(prev => [...prev, { ...taskData, id: generateId(), status: 'pending' }]);
+        onAddStudyTask(taskData);
       };
       
       const handleToggleStudyTask = (taskId) => {
-        setStudyTasks(prev => prev.map(t => 
-          t.id === taskId ? { ...t, status: t.status === 'pending' ? 'completed' : 'pending' } : t
-        ));
+        onToggleStudyTask(taskId);
       };
       
       const handleDeleteStudyTask = (taskId) => {
-        setStudyTasks(prev => prev.filter(t => t.id !== taskId));
+        onDeleteStudyTask(taskId);
       };
       
       const handleAddTheme = (e) => {
         e.preventDefault();
         if (!newThemeName.trim()) return;
-        setThemes(prev => [...prev, { id: generateId(), name: newThemeName }]);
+        onAddTheme(newThemeName); // Llama a la prop
         setNewThemeName('');
       };
       
@@ -906,7 +992,7 @@
           {/* Sección Pomodoro */}
           <div className="bg-gray-800 rounded-xl shadow-lg p-8 mb-8 flex flex-col items-center">
             <h2 className="text-3xl font-bold text-white mb-6">Temporizador Pomodoro</h2>
-            <div className="text-8xl font-mono text-white mb-6">{formatPomodoroTime(pomodoroTime)}</div>
+            <div className="text-7xl sm:text-8xl font-mono text-white mb-6">{formatPomodoroTime(pomodoroTime)}</div>
             <div className="flex space-x-4 mb-6">
               <button onClick={() => isPomodoroActive ? pausePomodoro() : startPomodoro()} className="p-4 px-8 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-lg">
                 {isPomodoroActive ? 'Pausar' : 'Iniciar'}
@@ -933,7 +1019,7 @@
             />
 
             {/* Filtros y Temas */}
-            <div className="flex flex-wrap items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-between mb-4">
               <div className="flex space-x-2 overflow-x-auto py-2">
                 <button onClick={() => setFilterTheme('all')} className={`p-2 px-4 rounded-full text-sm ${filterTheme === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>Todos</button>
                 {themes.map(theme => (
@@ -942,7 +1028,7 @@
                   </button>
                 ))}
               </div>
-              <form onSubmit={handleAddTheme} className="flex ml-4">
+              <form onSubmit={handleAddTheme} className="flex w-full sm:w-auto mt-4 sm:mt-0 sm:ml-4">
                 <input 
                   type="text" 
                   value={newThemeName} 
@@ -982,14 +1068,293 @@
     };
 
 
+    // --- (NUEVO) Planificador de Estudio IA ---
+    const StudyPlannerAI = ({ onClose, onAddStudyTask, onAddTheme }) => {
+      const [plans, setPlans] = useLocalStorage('ai_study_plans', []);
+      const [selectedPlan, setSelectedPlan] = useState(null);
+      const [isLoading, setIsLoading] = useState(false);
+      const [error, setError] = useState(null);
+
+      // Estado de edición
+      const [currentName, setCurrentName] = useState('');
+      const [currentSyllabus, setCurrentSyllabus] = useState('');
+      const [generatedSchedule, setGeneratedSchedule] = useState(null);
+
+      const selectPlan = (plan) => {
+        setSelectedPlan(plan);
+        setCurrentName(plan.name);
+        setCurrentSyllabus(plan.syllabusText);
+        setGeneratedSchedule(plan.generatedSchedule || null);
+        setError(null);
+      };
+
+      const handleCreateNewPlan = () => {
+        const newPlan = {
+          id: generateId(),
+          name: 'Nuevo Plan de Estudio',
+          syllabusText: 'Pega tu temario aquí...',
+          generatedSchedule: null
+        };
+        setPlans(prev => [newPlan, ...prev]);
+        selectPlan(newPlan);
+      };
+
+      const handleSavePlan = () => {
+        if (!selectedPlan) return;
+        const updatedPlan = {
+          ...selectedPlan,
+          name: currentName,
+          syllabusText: currentSyllabus,
+          generatedSchedule: generatedSchedule // Guardar también el cronograma
+        };
+        setPlans(prev => prev.map(p => p.id === selectedPlan.id ? updatedPlan : p));
+        setSelectedPlan(updatedPlan);
+      };
+      
+      const handleDeletePlan = () => {
+        if (!selectedPlan) return;
+        setPlans(prev => prev.filter(p => p.id !== selectedPlan.id));
+        setSelectedPlan(null);
+        setCurrentName('');
+        setCurrentSyllabus('');
+        setGeneratedSchedule(null);
+      };
+
+      const callGeminiAPI = async (syllabus, retries = 3, delay = 1000) => {
+        const apiKey = ""; // API key is handled by the environment
+        const apiUrl = `https://generativLanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        const systemPrompt = `Eres un asistente experto en planificación de estudios. Tu tarea es analizar el siguiente plan de estudios (syllabus) y dividirlo en una lista de bloques de estudio accionables.
+Responde *únicamente* con un objeto JSON válido que siga este esquema.
+El 'tema' debe ser el nombre general de la materia (ej: "Historia Antigua", "Programación en React").
+Cada 'bloque' debe ser una tarea discreta y específica.
+
+Esquema JSON:
+{
+  "type": "OBJECT",
+  "properties": {
+    "tema": { "type": "STRING" },
+    "bloques": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "titulo": { "type": "STRING" },
+          "descripcion": { "type": "STRING" }
+        }
+      }
+    }
+  }
+}`;
+        
+        const payload = {
+          contents: [{ parts: [{ text: syllabus }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                "tema": { "type": "STRING" },
+                "bloques": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                      "titulo": { "type": "STRING" },
+                      "descripcion": { "type": "STRING" }
+                    },
+                    "required": ["titulo"]
+                  }
+                }
+              },
+              "required": ["tema", "bloques"]
+            }
+          }
+        };
+
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            throw new Error(`API error: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+          const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (!jsonText) {
+            throw new Error("No se recibió contenido válido de la IA.");
+          }
+          
+          return JSON.parse(jsonText);
+
+        } catch (error) {
+          if (retries > 0) {
+            await new Promise(res => setTimeout(res, delay));
+            return callGeminiAPI(syllabus, retries - 1, delay * 2);
+          } else {
+            throw error;
+          }
+        }
+      };
+
+      const handleGenerateSchedule = async () => {
+        if (!selectedPlan) return;
+        setIsLoading(true);
+        setError(null);
+        setGeneratedSchedule(null);
+        try {
+          const schedule = await callGeminiAPI(currentSyllabus);
+          setGeneratedSchedule(schedule);
+          // Auto-guardar el plan con el cronograma generado
+          const updatedPlan = { ...selectedPlan, name: currentName, syllabusText: currentSyllabus, generatedSchedule: schedule };
+          setPlans(prev => prev.map(p => p.id === selectedPlan.id ? updatedPlan : p));
+          setSelectedPlan(updatedPlan);
+        } catch (err) {
+          console.error(err);
+          setError("Error al generar el cronograma. Inténtalo de nuevo.");
+        }
+        setIsLoading(false);
+      };
+
+      const handleConfirmSchedule = () => {
+        if (!generatedSchedule || !generatedSchedule.bloques) return;
+        
+        // 1. Añadir el tema (o encontrar el existente)
+        const themeId = onAddTheme(generatedSchedule.tema);
+        
+        // 2. Añadir cada bloque como una tarea de estudio
+        generatedSchedule.bloques.forEach(bloque => {
+          const newStudyTask = {
+            text: bloque.titulo,
+            projectId: themeId, // ID del tema
+            date: null,
+            time: null,
+            notes: bloque.descripcion || '',
+          };
+          onAddStudyTask(newStudyTask); // Llama a la función de App
+        });
+        
+        // 3. Cerrar el modal
+        onClose();
+      };
+
+      return (
+        <div className="bg-gray-800 p-0 rounded-xl" style={{width: '90vw', height: '85vh', maxWidth: '1200px'}}>
+          <div className="grid grid-cols-1 md:grid-cols-4 h-full">
+            {/* Columna de Planes */}
+            <div className="md:col-span-1 bg-gray-900 p-4 flex flex-col rounded-l-xl">
+              <h2 className="text-2xl font-bold text-white mb-4">Planes de Estudio</h2>
+              <button onClick={handleCreateNewPlan} className="w-full p-3 mb-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+                Nuevo Plan
+              </button>
+              <div className="space-y-2 overflow-y-auto">
+                {plans.map(plan => (
+                  <div
+                    key={plan.id}
+                    onClick={() => selectPlan(plan)}
+                    className={`p-3 rounded-lg cursor-pointer ${selectedPlan?.id === plan.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}
+                  >
+                    <h3 className="font-semibold text-white truncate">{plan.name}</h3>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Editor y Cronograma */}
+            {selectedPlan ? (
+              <>
+                {/* Columna Editor */}
+                <div className="md:col-span-1 bg-gray-800 p-4 flex flex-col border-l border-r border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4">Editor del Plan</h3>
+                  <input
+                    type="text"
+                    value={currentName}
+                    onChange={(e) => setCurrentName(e.target.value)}
+                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+                    placeholder="Nombre del Plan"
+                  />
+                  <textarea
+                    value={currentSyllabus}
+                    onChange={(e) => setCurrentSyllabus(e.target.value)}
+                    className="w-full h-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white outline-none resize-none mb-4"
+                    placeholder="Pega tu temario aquí..."
+                  ></textarea>
+                  <div className="flex space-x-2">
+                    <button onClick={handleSavePlan} className="flex-1 p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">Guardar</button>
+                    <button onClick={handleDeletePlan} className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700"><TrashIcon /></button>
+                  </div>
+                  <button
+                    onClick={handleGenerateSchedule}
+                    disabled={isLoading}
+                    className="w-full mt-4 p-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {isLoading ? "Generando..." : "Generar Cronograma (IA)"}
+                  </button>
+                </div>
+                
+                {/* Columna Cronograma */}
+                <div className="md:col-span-2 bg-gray-800 p-4 flex flex-col rounded-r-xl">
+                  <h3 className="text-xl font-bold text-white mb-4">Cronograma Sugerido</h3>
+                  {error && <p className="text-red-400">{error}</p>}
+                  {isLoading && <LoadingSpinner />}
+                  {generatedSchedule && (
+                    <div className="flex flex-col h-full">
+                      <div className="bg-gray-700 p-4 rounded-lg overflow-y-auto flex-grow">
+                        <h4 className="text-lg font-semibold text-blue-300 mb-2">Tema: {generatedSchedule.tema}</h4>
+                        <ul className="list-disc list-inside space-y-2">
+                          {generatedSchedule.bloques.map((bloque, index) => (
+                            <li key={index} className="p-2 bg-gray-800 rounded">
+                              <strong className="text-white">{bloque.titulo}</strong>
+                              {bloque.descripcion && <p className="text-sm text-gray-400 ml-4">{bloque.descripcion}</p>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <button
+                        onClick={handleConfirmSchedule}
+                        className="w-full mt-4 p-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700"
+                      >
+                        Confirmar y Crear Tareas en "Estudio"
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="md:col-span-3 flex items-center justify-center h-full text-gray-500 p-4">
+                Selecciona un plan o crea uno nuevo para comenzar.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+
     // --- Componente Principal: App ---
     function App() {
       const [view, setView] = useState('dashboard');
       const [tasks, setTasks] = useLocalStorage('tasks', []);
-      const [projects, setProjects] = useLocalStorage('projects', [{ id: 'inbox', name: 'Bandeja de entrada', description: 'Tareas sin proyecto específico' }]);
+      const [projects, setProjects] = useLocalStorage('projects', [{ 
+        id: 'inbox', 
+        name: 'Bandeja de entrada', 
+        description: 'Tareas sin proyecto específico',
+        color: '#6b7280' // gray-500
+      }]);
       
+      // Estado de Estudio (centralizado)
+      const [studyTasks, setStudyTasks] = useLocalStorage('study_tasks', []);
+      const [studyThemes, setStudyThemes] = useLocalStorage('study_themes', [{ id: 'general', name: 'General' }]);
+
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [editingTask, setEditingTask] = useState(null);
+      const [isPlannerOpen, setIsPlannerOpen] = useState(false); // Modal del Planificador
       
       const [focusTask, setFocusTask] = useState(null);
       const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
@@ -1031,6 +1396,41 @@
         setTasks(prev => prev.map(t => t.projectId === projectId ? { ...t, projectId: 'inbox' } : t));
       };
 
+      // --- CRUD de Tareas de Estudio (Centralizado) ---
+      const handleAddStudyTask = (taskData) => {
+        const newTask = { 
+          ...taskData, 
+          id: generateId(), 
+          status: 'pending' 
+        };
+        setStudyTasks(prev => [...prev, newTask]);
+      };
+      
+      const handleToggleStudyTask = (taskId) => {
+        setStudyTasks(prev => prev.map(t => 
+          t.id === taskId ? { ...t, status: t.status === 'pending' ? 'completed' : 'pending' } : t
+        ));
+      };
+      
+      const handleDeleteStudyTask = (taskId) => {
+        setStudyTasks(prev => prev.filter(t => t.id !== taskId));
+      };
+      
+      const handleAddTheme = (themeName) => {
+        let themeId;
+        const existing = studyThemes.find(t => t.name.toLowerCase() === themeName.toLowerCase());
+        
+        if (existing) {
+          themeId = existing.id;
+        } else {
+          const newTheme = { id: generateId(), name: themeName };
+          themeId = newTheme.id;
+          setStudyThemes(prev => [...prev, newTheme]);
+        }
+        return themeId; // Devuelve el ID (nuevo o existente)
+      };
+
+
       // --- Modales ---
       const handleEditTask = (task) => {
         setEditingTask(task);
@@ -1061,6 +1461,7 @@
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
               onStartTimer={handleStartTimer}
+              onOpenPlanner={() => setIsPlannerOpen(true)} // Pasar la función
             />;
           case 'agenda':
             return <AgendaView 
@@ -1079,11 +1480,19 @@
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
               onStartTimer={handleStartTimer}
+              onOpenPlanner={() => setIsPlannerOpen(true)} // Pasar la función
             />;
           case 'notes':
             return <NotesView />;
           case 'study':
-            return <StudyView onAddTask={handleAddTask} projects={projects} />;
+            return <StudyView 
+              studyTasks={studyTasks}
+              themes={studyThemes}
+              onAddStudyTask={handleAddStudyTask}
+              onToggleStudyTask={handleToggleStudyTask}
+              onDeleteStudyTask={handleDeleteStudyTask}
+              onAddTheme={handleAddTheme}
+            />;
           default:
             return null;
         }
@@ -1132,6 +1541,15 @@
                   projects={projects}
                 />
               )}
+            </Modal>
+            
+            {/* Modal del Planificador IA */}
+            <Modal isOpen={isPlannerOpen} onClose={() => setIsPlannerOpen(false)}>
+              <StudyPlannerAI
+                onClose={() => setIsPlannerOpen(false)}
+                onAddStudyTask={handleAddStudyTask}
+                onAddTheme={handleAddTheme}
+              />
             </Modal>
             
             {focusTask && (
