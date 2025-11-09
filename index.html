@@ -296,6 +296,13 @@
       return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     };
 
+    // (NUEVO) Helper para obtener la fecha de mañana
+    const getTomorrowISO = () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
+    };
+
     const formatDate = (isoDate) => {
       if (!isoDate) return '';
       try {
@@ -426,9 +433,19 @@
       );
     };
 
-    // --- Componente AddTaskForm (Híbrido IA) ---
-    const AddTaskForm = ({ onAiAddTask, projects, defaultProjectId = null }) => {
-      const [prompt, setPrompt] = useState('');
+    // --- (MODIFICADO) Componente AddTaskForm (Híbrido IA / Manual) ---
+    const AddTaskForm = ({ onAiAddTask, onManualAddTask, projects, defaultProjectId = null }) => {
+      const [isAiMode, setIsAiMode] = useState(true); // Modo IA por defecto
+      
+      // Estado para modo IA
+      const [aiPrompt, setAiPrompt] = useState('');
+      
+      // Estado para modo Manual
+      const [manualText, setManualText] = useState('');
+      const [manualDate, setManualDate] = useState('');
+      const [manualTime, setManualTime] = useState('');
+      
+      // Estado compartido
       const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || 'inbox');
       const [isLoading, setIsLoading] = useState(false);
       
@@ -436,36 +453,126 @@
         // Sincroniza el proyecto si el default cambia (al navegar en Proyectos)
         setSelectedProjectId(defaultProjectId || 'inbox');
       }, [defaultProjectId]);
+      
+      // Resetea los inputs al cambiar de modo
+      useEffect(() => {
+        setAiPrompt('');
+        setManualText('');
+        setManualDate('');
+        setManualTime('');
+      }, [isAiMode]);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!prompt.trim()) return;
-        
         setIsLoading(true);
-        try {
-          // Pasa el proyecto seleccionado manualmente a la función de IA
-          await onAiAddTask(prompt, selectedProjectId);
-          setPrompt('');
-          // Resetea al proyecto por defecto (Bandeja de entrada) solo si no estamos en un proyecto específico
-          if (defaultProjectId === null) {
-            setSelectedProjectId('inbox');
+        
+        if (isAiMode) {
+          // --- Lógica MODO IA ---
+          if (!aiPrompt.trim()) {
+            setIsLoading(false);
+            return;
           }
-        } catch (error) {
-          // El error ya se maneja en onAiAddTask (con toast)
-        } finally {
-          setIsLoading(false);
+          try {
+            await onAiAddTask(aiPrompt, selectedProjectId);
+            setAiPrompt('');
+            if (defaultProjectId === null) {
+              setSelectedProjectId('inbox');
+            }
+          } catch (error) {
+            // El error ya se maneja en onAiAddTask (con toast)
+          }
+        } else {
+          // --- Lógica MODO MANUAL ---
+          if (!manualText.trim()) {
+            setIsLoading(false);
+            return;
+          }
+          try {
+            onManualAddTask({
+              id: generateId(),
+              text: manualText,
+              date: manualDate,
+              time: manualTime,
+              projectId: selectedProjectId,
+              status: 'pending'
+            });
+            // Limpiar formulario manual
+            setManualText('');
+            setManualDate('');
+            setManualTime('');
+            if (defaultProjectId === null) {
+              setSelectedProjectId('inbox');
+            }
+          } catch (error) {
+            console.error("Error al añadir tarea manual:", error);
+          }
         }
+        
+        setIsLoading(false);
       };
 
       return (
         <form onSubmit={handleSubmit} className="p-4 bg-gray-800 rounded-xl shadow-lg mb-6">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Escribe tu tarea... (Ej: Reunión con el equipo mañana a las 10am)"
-            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none h-20 resize-none"
-            disabled={isLoading}
-          />
+          {/* Toggle de Modo */}
+          <div className="flex bg-gray-700 rounded-lg p-1 mb-4">
+            <button
+              type="button"
+              onClick={() => setIsAiMode(true)}
+              className={`w-1/2 p-2 rounded-md font-semibold flex items-center justify-center transition-colors ${isAiMode ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
+            >
+              <SparklesIcon /> <span className="ml-2">Modo IA</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAiMode(false)}
+              className={`w-1/2 p-2 rounded-md font-semibold flex items-center justify-center transition-colors ${!isAiMode ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
+            >
+              <EditIcon /> <span className="ml-2">Modo Manual</span>
+            </button>
+          </div>
+
+          {isAiMode ? (
+            // --- Vista Modo IA ---
+            <div>
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Escribe tu tarea... (Ej: Reunión con el equipo mañana a las 10am)"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none h-20 resize-none"
+                disabled={isLoading}
+              />
+            </div>
+          ) : (
+            // --- Vista Modo Manual ---
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                placeholder="Descripción de la tarea"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                disabled={isLoading}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={(e) => setManualDate(e.target.value)}
+                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                  disabled={isLoading}
+                />
+                <input
+                  type="time"
+                  value={manualTime}
+                  onChange={(e) => setManualTime(e.target.value)}
+                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+          )}
+          
+          {/* Controles Comunes (Proyecto y Submit) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
             <select
               value={selectedProjectId}
@@ -488,11 +595,12 @@
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Analizando...
+                  {isAiMode ? 'Analizando...' : 'Añadiendo...'}
                 </>
               ) : (
                 <>
-                  <SparklesIcon /> <span className="ml-2">Añadir Tarea (IA)</span>
+                  {isAiMode ? <SparklesIcon /> : <PlusIcon />}
+                  <span className="ml-2">{isAiMode ? 'Añadir Tarea (IA)' : 'Añadir Tarea'}</span>
                 </>
               )}
             </button>
@@ -678,7 +786,7 @@
     };
 
     // --- Vista Dashboard (Inicio) ---
-    const DashboardView = ({ tasks, projects, onAiAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
+    const DashboardView = ({ tasks, projects, onAiAddTask, onManualAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer }) => {
       const today = getTodayISO();
       const [showTimeline, setShowTimeline] = useState(false);
 
@@ -720,6 +828,7 @@
         <div>
           <AddTaskForm 
             onAiAddTask={onAiAddTask} 
+            onManualAddTask={onManualAddTask} // (NUEVO)
             projects={projects} 
             defaultProjectId={null}
           />
@@ -901,7 +1010,7 @@
     // --- Vista Proyectos ---
     const ProjectsView = ({ 
       projects, tasks, onAddProject, onDeleteProject, 
-      onAiAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer,
+      onAiAddTask, onManualAddTask, onUpdateTask, onDeleteTask, onEditTask, onStartTimer,
       onShowPlanner
     }) => {
       const [selectedProjectId, setSelectedProjectId] = useState('inbox');
@@ -1016,7 +1125,8 @@
               
               <h3 className="text-xl font-semibold text-blue-400 mb-4">Añadir Tarea al Proyecto</h3>
               <AddTaskForm 
-                onAiAddTask={onAiAddTask} 
+                onAiAddTask={onAiAddTask}
+                onManualAddTask={onManualAddTask} // (NUEVO)
                 projects={projects} 
                 defaultProjectId={selectedProject.id}
               />
@@ -1656,16 +1766,20 @@ No añadas fechas ni horas. Solo la lista de tareas.
       // --- Funciones CRUD de Tareas ---
       const handleAddTask = (task) => {
         setTasks(prev => [task, ...prev]);
+        showToast('¡Tarea creada manualmente!', 'success');
       };
       
       // (CORREGIDO) Función de añadir tarea con IA
       const handleAiAddTask = async (prompt, selectedProjectId) => {
-        // (CORREGIDO) Usar formato universal YYYY-MM-DD
         const today = getTodayISO();
+        const tomorrow = getTomorrowISO(); // (NUEVO)
 
         const systemPrompt = `
 Eres un asistente para una app de agenda. Tu única función es tomar un texto en lenguaje natural y convertirlo en un objeto JSON estructurado para una tarea.
-La fecha de hoy es: ${today}. Usa esto como referencia para "mañana", "el viernes", "próximo lunes", "hoy", etc.
+La fecha de hoy es: ${today}.
+Si el usuario dice "hoy", "para hoy" o "el día de hoy", DEBES usar la fecha ${today}.
+Si el usuario dice "mañana", DEBES usar la fecha ${tomorrow}.
+Usa ${today} como referencia para "el viernes", "próximo lunes", etc.
 El formato de fecha de salida DEBE ser 'YYYY-MM-DD'.
 El formato de hora de salida DEBE ser 'HH:mm' (24 horas).
 Si no se especifica una hora, deja el campo 'time' como una cadena vacía ('').
@@ -1686,28 +1800,40 @@ NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
         try {
           const resultJson = await callGemini(prompt, schema, systemPrompt);
           
-          handleAddTask({
-            id: generateId(),
-            text: resultJson.text || prompt, // Fallback al prompt si el texto está vacío
-            date: resultJson.date || '',
-            time: resultJson.time || '',
-            projectId: selectedProjectId, // Usa el ID seleccionado manualmente
-            status: 'pending'
-          });
+          // (NUEVO) Re-validar si la IA devolvió "hoy" como texto en lugar de la fecha
+          let finalDate = resultJson.date || '';
+          if (prompt.toLowerCase().includes('hoy') && finalDate === '') {
+             finalDate = today;
+          }
+
+          setTasks(prev => [
+            {
+              id: generateId(),
+              text: resultJson.text || prompt, // Fallback al prompt si el texto está vacío
+              date: finalDate,
+              time: resultJson.time || '',
+              projectId: selectedProjectId, // Usa el ID seleccionado manualmente
+              status: 'pending'
+            },
+            ...prev
+          ]);
           showToast('¡Tarea creada por IA!', 'success');
 
         } catch (error) {
           console.error('Error procesando tarea con IA:', error);
           showToast('Error de la IA: No se pudo analizar la tarea.', 'error');
           // Fallback: crear la tarea con el texto plano
-          handleAddTask({
-            id: generateId(),
-            text: prompt, // Tarea de texto plano
-            date: '',
-            time: '',
-            projectId: selectedProjectId, // Usa el ID seleccionado manualmente
-            status: 'pending'
-          });
+          setTasks(prev => [
+            {
+              id: generateId(),
+              text: prompt, // Tarea de texto plano
+              date: '',
+              time: '',
+              projectId: selectedProjectId, // Usa el ID seleccionado manually
+              status: 'pending'
+            }, 
+            ...prev
+          ]);
           showToast('Se creó una tarea simple sin fecha.', 'info');
           throw error; // Propagar el error para que el formulario sepa que falló
         }
@@ -1791,6 +1917,7 @@ NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
               tasks={tasks} 
               projects={projects}
               onAiAddTask={handleAiAddTask}
+              onManualAddTask={handleAddTask}
               onUpdateTask={handleToggleComplete}
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
@@ -1809,6 +1936,7 @@ NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
               onAddProject={handleAddProject}
               onDeleteProject={handleDeleteProject}
               onAiAddTask={handleAiAddTask}
+              onManualAddTask={handleAddTask}
               onUpdateTask={handleToggleComplete}
               onDeleteTask={handleDeleteTask}
               onEditTask={handleEditTask}
