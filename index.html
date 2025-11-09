@@ -1772,20 +1772,33 @@ No añadas fechas ni horas. Solo la lista de tareas.
       // (CORREGIDO) Función de añadir tarea con IA
       const handleAiAddTask = async (prompt, selectedProjectId) => {
         const today = getTodayISO();
-        const tomorrow = getTomorrowISO(); // (NUEVO)
+        const tomorrow = getTomorrowISO();
 
+        // (MODIFICADO) Mover el contexto de fecha al prompt principal para mayor claridad
+        const enhancedPrompt = `
+Contexto de Fechas:
+- La fecha de hoy es: ${today}
+- La fecha de mañana es: ${tomorrow}
+
+Tarea del Usuario:
+"${prompt}"
+
+Instrucción:
+Analiza la "Tarea del Usuario" usando el "Contexto de Fechas" y extrae los detalles en el formato JSON requerido.
+Si la tarea dice "hoy" o "para hoy", usa la fecha ${today}.
+Si la tarea dice "mañana", usa la fecha ${tomorrow}.
+Extrae solo el texto de la tarea, sin la fecha/hora.
+`;
+
+        // (MODIFICADO) El SystemPrompt ahora es solo sobre el ROL y el FORMATO.
         const systemPrompt = `
-Eres un asistente para una app de agenda. Tu única función es tomar un texto en lenguaje natural y convertirlo en un objeto JSON estructurado para una tarea.
-La fecha de hoy es: ${today}.
-Si el usuario dice "hoy", "para hoy" o "el día de hoy", DEBES usar la fecha ${today}.
-Si el usuario dice "mañana", DEBES usar la fecha ${tomorrow}.
-Usa ${today} como referencia para "el viernes", "próximo lunes", etc.
+Eres un asistente de agenda. Tu única función es tomar el texto del usuario y convertirlo en un objeto JSON estructurado, siguiendo el esquema.
 El formato de fecha de salida DEBE ser 'YYYY-MM-DD'.
 El formato de hora de salida DEBE ser 'HH:mm' (24 horas).
-Si no se especifica una hora, deja el campo 'time' como una cadena vacía ('').
-Si no se especifica una fecha, deja el campo 'date' como una cadena vacía ('').
-El campo 'text' debe ser solo la descripción de la tarea, sin la fecha/hora.
-NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
+Si no se especifica una hora, el campo 'time' debe ser una cadena vacía ('').
+Si no se especifica una fecha, el campo 'date' debe ser una cadena vacía ('').
+El campo 'text' debe ser solo la descripción de la tarea.
+NO intentes adivinar el proyecto.
 `;
         const schema = {
           type: "OBJECT",
@@ -1798,19 +1811,16 @@ NO intentes adivinar el proyecto. El usuario lo seleccionará manualmente.
         };
         
         try {
-          const resultJson = await callGemini(prompt, schema, systemPrompt);
+          // (MODIFICADO) Usar el 'enhancedPrompt' en lugar del 'prompt' simple
+          const resultJson = await callGemini(enhancedPrompt, schema, systemPrompt);
           
-          // (NUEVO) Re-validar si la IA devolvió "hoy" como texto en lugar de la fecha
-          let finalDate = resultJson.date || '';
-          if (prompt.toLowerCase().includes('hoy') && finalDate === '') {
-             finalDate = today;
-          }
-
+          // (MODIFICADO) Quitar el parche anterior. 
+          // Confiamos en que la IA ahora procesará la fecha correctamente.
           setTasks(prev => [
             {
               id: generateId(),
               text: resultJson.text || prompt, // Fallback al prompt si el texto está vacío
-              date: finalDate,
+              date: resultJson.date || '', // Usar directamente el resultado de la IA
               time: resultJson.time || '',
               projectId: selectedProjectId, // Usa el ID seleccionado manualmente
               status: 'pending'
